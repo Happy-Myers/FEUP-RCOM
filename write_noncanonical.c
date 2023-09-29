@@ -92,21 +92,44 @@ int main(int argc, char *argv[])
     // Create string to send
     unsigned char buf[BUF_SIZE] = {0};
 
-    for (int i = 0; i < BUF_SIZE; i++)
-    {
-        buf[i] = 'a' + i % 26;
-    }
+    unsigned char flag = 0x7E;
+    unsigned char A = 0x03;
+    unsigned char C = 0X03;
+    unsigned char BCC1 = A^C;
+
+    buf[0] = flag;
+    buf[1] = A;
+    buf[2] = C;
+    buf[3] = BCC1;
+    buf[4] = flag;
+
 
     // In non-canonical mode, '\n' does not end the writing.
     // Test this condition by placing a '\n' in the middle of the buffer.
     // The whole buffer must be sent even with the '\n'.
-    buf[5] = '\n';
 
-    int bytes = write(fd, buf, BUF_SIZE);
+    int bytes = write(fd, buf, 5);
     printf("%d bytes written\n", bytes);
 
     // Wait until all bytes have been written to the serial port
     sleep(1);
+
+    printf("waiting to read...\n");
+
+    memset(buf, 0, BUF_SIZE);
+
+    while(STOP == FALSE){
+        int bytes = read(fd, buf, 5);
+        buf[bytes] = '\0';
+        for(int i = 0; i < bytes;i++)
+            printf("var = 0x%02X\n",(unsigned int) (buf[i] & 0xFF));
+        if(buf[1] ^ buf[2] != buf[3])
+            exit(-1);
+        else{
+            STOP = TRUE;
+        }
+    }
+
 
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
