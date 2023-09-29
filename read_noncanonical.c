@@ -94,13 +94,34 @@ int main(int argc, char *argv[])
     while (STOP == FALSE)
     {
         // Returns after 5 chars have been input
-        int bytes = read(fd, buf, BUF_SIZE);
+        int bytes = read(fd, buf, 5);
         buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
 
-        printf(":%s:%d\n", buf, bytes);
-        if (buf[0] == 'z')
-            STOP = TRUE;
+		for(int i=0; i<bytes; i++)
+			printf("var = 0x%02X\n", buf[i]);
+			
+		printf("%02X\n", buf[1] ^ buf[2]);
+		printf("%02X\n", buf[3]);
+
+		if((buf[1] ^ buf[2]) != buf[3]){
+			printf("erro\n");
+			exit(-1);
+		}
+		else{
+			STOP = TRUE;
+		}
     }
+    printf("batata\n");
+
+	memset(buf, 0, BUF_SIZE);
+	
+	buf[0] = 0x7E;
+	buf[1] = 0x01;
+	buf[2] = 0x07;
+	buf[3] = 0x01 ^ 0x07;
+	buf[4] = 0x7E;
+	
+	int bytes = write(fd, buf, 5);
 
     // The while() cycle should be changed in order to respect the specifications
     // of the protocol indicated in the Lab guide
