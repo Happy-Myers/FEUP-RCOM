@@ -22,6 +22,14 @@
 
 #define BUF_SIZE 256
 
+enum STATE {
+    ST,
+    FI_rcv,
+    A_rcv,
+    C_rcv,
+    BCC_rcv
+};
+
 volatile int STOP = FALSE;
 
 int alarmEnabled = FALSE;
@@ -78,7 +86,7 @@ int main(int argc, char *argv[])
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -124,31 +132,47 @@ int main(int argc, char *argv[])
         if(alarmEnabled == FALSE){
             alarm(3);
             alarmEnabled = TRUE;
+            int bytes = write(fd, buf, 5);
+            printf("%d bytes written\n", bytes);
+            printf("waiting to read...\n");
         }
 
-        int bytes = write(fd, buf, 5);
-        printf("%d bytes written\n", bytes);
 
-        // Wait until all bytes have been written to the serial port
-        sleep(1);
+        enum STATE state = ST;
 
-        printf("waiting to read...\n");
+        while (STOP == FALSE && (read(fd, buf, 1) > 0)){
+        buf[1] = '\0'; // Set end of string to '\0', so we can printf
 
-        memset(buf, 0, BUF_SIZE);
+        switch(state){
+            case ST:
+                if(buf[0] == 0x7E) state = FI_rcv;
+                break;
+            case FI_rcv:
+                if(buf[0] == 0x01) state = A_rcv;
+                else if(buf[0] != 0x7E) state = ST;
+                break;
+            case A_rcv:
+                if(buf[0] == 0x07) state = C_rcv;
+                else if(buf[0] == 0x7E) state = FI_rcv;
+                else state = ST;
+                break;
+            case C_rcv:
+                if(buf[0] == (0x01 ^ 0x07)) state = BCC_rcv;
+                else if(buf[0] == 0x7E) state = FI_rcv;
+                else state = ST;
+                break;
+            case BCC_rcv:
+                if(buf[0] == 0x7E) {
+                    STOP = TRUE;
+                    alarm(0);
+                    alarmEnabled = FALSE;
+                }
+                else state = ST;
+                break;
+        }
 
-        while(STOP == FALSE){
-            int bytes = read(fd, buf, 5);
-            buf[bytes] = '\0';
-            for(int i = 0; i < bytes;i++)
-                printf("var = 0x%02X\n",(unsigned int) (buf[i] & 0xFF));
-            if((buf[1] ^ buf[2]) != buf[3])
-                exit(-1);
-            else{
-                STOP = TRUE;
-                alarm(0);
-                alarmEnabled = FALSE;
-            }
-        }        
+		printf("var = 0x%02X\n", buf[0]);
+    }       
     }
 
     printf("ending program\n");
