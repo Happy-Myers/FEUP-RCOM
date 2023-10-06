@@ -99,9 +99,6 @@ int main(int argc, char *argv[])
 
 		for(int i=0; i<bytes; i++)
 			printf("var = 0x%02X\n", buf[i]);
-			
-		printf("%02X\n", buf[1] ^ buf[2]);
-		printf("%02X\n", buf[3]);
 
 		if((buf[1] ^ buf[2]) != buf[3]){
 			printf("erro\n");
@@ -111,7 +108,6 @@ int main(int argc, char *argv[])
 			STOP = TRUE;
 		}
     }
-    printf("batata\n");
 
 	memset(buf, 0, BUF_SIZE);
 	

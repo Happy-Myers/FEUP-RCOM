@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <termios.h>
@@ -22,6 +23,15 @@
 #define BUF_SIZE 256
 
 volatile int STOP = FALSE;
+
+int alarmEnabled = FALSE;
+int alarmCount= 0;
+void alarmHandler(int signal){
+    alarmEnabled = FALSE;
+    alarmCount++;
+
+    printf("Alarm #%d\n", alarmCount);
+}
 
 int main(int argc, char *argv[])
 {
@@ -103,33 +113,45 @@ int main(int argc, char *argv[])
     buf[3] = BCC1;
     buf[4] = flag;
 
+    (void)signal(SIGALRM, alarmHandler);
+
 
     // In non-canonical mode, '\n' does not end the writing.
     // Test this condition by placing a '\n' in the middle of the buffer.
     // The whole buffer must be sent even with the '\n'.
 
-    int bytes = write(fd, buf, 5);
-    printf("%d bytes written\n", bytes);
-
-    // Wait until all bytes have been written to the serial port
-    sleep(1);
-
-    printf("waiting to read...\n");
-
-    memset(buf, 0, BUF_SIZE);
-
-    while(STOP == FALSE){
-        int bytes = read(fd, buf, 5);
-        buf[bytes] = '\0';
-        for(int i = 0; i < bytes;i++)
-            printf("var = 0x%02X\n",(unsigned int) (buf[i] & 0xFF));
-        if(buf[1] ^ buf[2] != buf[3])
-            exit(-1);
-        else{
-            STOP = TRUE;
+    while(alarmCount < 4 && !STOP){
+        if(alarmEnabled == FALSE){
+            alarm(3);
+            alarmEnabled = TRUE;
         }
+
+        int bytes = write(fd, buf, 5);
+        printf("%d bytes written\n", bytes);
+
+        // Wait until all bytes have been written to the serial port
+        sleep(1);
+
+        printf("waiting to read...\n");
+
+        memset(buf, 0, BUF_SIZE);
+
+        while(STOP == FALSE){
+            int bytes = read(fd, buf, 5);
+            buf[bytes] = '\0';
+            for(int i = 0; i < bytes;i++)
+                printf("var = 0x%02X\n",(unsigned int) (buf[i] & 0xFF));
+            if((buf[1] ^ buf[2]) != buf[3])
+                exit(-1);
+            else{
+                STOP = TRUE;
+                alarm(0);
+                alarmEnabled = FALSE;
+            }
+        }        
     }
 
+    printf("ending program\n");
 
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
