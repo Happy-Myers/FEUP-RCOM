@@ -21,6 +21,14 @@
 
 #define BUF_SIZE 256
 
+enum STATE {
+    ST,
+    FI,
+    A,
+    C,
+    BCC
+};
+
 volatile int STOP = FALSE;
 
 int main(int argc, char *argv[])
@@ -90,24 +98,39 @@ int main(int argc, char *argv[])
 
     // Loop for input
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
+    enum STATE state = ST;
 
-    while (STOP == FALSE)
+    while (STOP == FALSE && (read(fd, buf, 1) > 0))
     {
-        // Returns after 5 chars have been input
-        int bytes = read(fd, buf, 5);
-        buf[bytes] = '\0'; // Set end of string to '\0', so we can printf
+        buf[1] = '\0'; // Set end of string to '\0', so we can printf
 
-		for(int i=0; i<bytes; i++)
-			printf("var = 0x%02X\n", buf[i]);
+        switch(state){
+            case ST:
+                if(buf[0] == 0x7E) state = FI;
+                break;
+            case FI:
+                if(buf[0] == 0x03) state = A;
+                else if(buf[0] != 0x7E) state = ST;
+                break;
+            case A:
+                if(buf[0] == 0x03) state = C;
+                else if(buf[0] == 0x7E) state = FI;
+                else state = ST;
+                break;
+            case C:
+                if(buf[0] == (0x03 ^ 0x03)) state = BCC;
+                else if(buf[0] == 0x7E) state = FI;
+                else state = ST;
+                break;
+            case BCC:
+                if(buf[0] == 0x7E) STOP = TRUE;
+                else state = ST;
+                break;
+        }
 
-		if((buf[1] ^ buf[2]) != buf[3]){
-			printf("erro\n");
-			exit(-1);
-		}
-		else{
-			STOP = TRUE;
-		}
+		printf("var = 0x%02X\n", buf[0]);
     }
+        
 
 	memset(buf, 0, BUF_SIZE);
 	

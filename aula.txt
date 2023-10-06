@@ -1,0 +1,34 @@
+concluida a fase de estabelecimento da ligaçao
+\/
+fase de transferencia de dados: llwrite(...) e llread(...)
+invocados repetidamente no EMISSOR e RECETOR
+
+
+
+llwirte(..): recebe pacote de dados em segmento do ficheiro
+              e
+             funcionalidades do protocolo: framing, sincronização => byte stuffing deteçao de erros, numeraçao para deteçao de duplicados, espera confirmaçao e se necessário re-envia
+
+em vez do pacote de dados usa um array fake ]
+unsigned char fake [10] = { 0x00, 0X01, 0X02, 0X7E, 0X00, 0X7D, 0X01, 0X7D, ...};
+
+1ª: percorrer o pacote (array) e verificar se existe 0x7E ou 0x7D. Trama I => iicia e termina com 0x7E.
+Possui bits D1 ... Dk+j e um campo final de detetar erros (BCC2) para detetar erros nos dados (enquanto A e C detetam erros no cabeçalho)
+
+Gerar BCC2 => XOR de tudo o que está no packet
+
+2) inspecionar o packet (BCC2 pode ser inclusive 7E) e implementar byte stuffing modificando possiveis caracteres reservados ao protocolo (7E e 7D) que habitualmente indicam inicio/fim da trama) => byte stuffing
+
+Se Di = 0x7E => 0x7D 0x5E
+Se Di = 0x7D => 0x7D 0x5D
+(1 < i < k+1)
+A = 0x03
+C = N(s) (0x00 trama I(0), 0x40 trama I(1))
+BCC1 => Xor de 0x03 com 0x00 ou XOR de 0x03 com 0x40 (A ^ C)
+
+No recetor:
+-recebe a trama e etnra na maquina de estados
+- verifica se houve erros no cabeçalho BCC1 != A ^ C dá erro, e se estiver correto ver BCC2
+- desfazer stuffing, ver se penultima posiçao  (antes do 7E) sempre que encontra um 7D vê se tem SE à frente e transforma 0x7D 0x5E => 0x7E
+
+- nao é propriamente necessario implementar um reject. Em caso de receber duplicado o recetor descarta (nao passa o que recebeu ao nivel da aplicaçao) e fica à espera vooltando ao inicio do ciclo de leitura
