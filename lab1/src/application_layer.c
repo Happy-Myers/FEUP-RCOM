@@ -8,6 +8,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate,
                                                         nTries, timeout);
 
+    // Rx faz OPEN
+    // Tx faz OPEN e envia Trama de Supervisão (S) com SET
+    // Rx responde à Trama de Supervisão (S) com UA
     if(llopen(connectionParams) < 0){
         printf("erro no llopen()\n");
         exit();
@@ -41,12 +44,8 @@ LinkLayer buildConnectionParams(const char *serialPort, const char *role, int ba
     connectionParams.nRetransmissions = nTries;
     connectionParams.timeout = timeout;
 
-    if(role == "tx"){
-        connectionParams.role = LinkLayerRole.LlTx;
-    }
-    else{
-        connectionParams.role = LinkLayerRole.LlRx;
-    }
+    if(role == "tx") connectionParams.role = LinkLayerRole.LlTx;
+    else connectionParams.role = LinkLayerRole.LlRx;
 
     return connectionParams;
 }

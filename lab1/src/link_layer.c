@@ -9,11 +9,23 @@
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters)
+int llopen(LinkLayer connectionParameters.role)
 {
     // TODO
-
+    txOpen();
+    if(connectionParameters.role == LinkLayerRole.LlRx){
+        rxOpen();
+    }
     return 1;
+}
+
+int rxOpen(){
+    volatile int STOP = FALSE;
+    enum STATE state = ST;
+    
+    while(STOP == FALSE){
+
+    }
 }
 
 ////////////////////////////////////////////////
