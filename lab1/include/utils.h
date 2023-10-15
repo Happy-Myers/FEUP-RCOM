@@ -1,6 +1,9 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
+#define BUF_SIZE 256
+
+
 #define FLAG    0x7E    // Synchronisation: start or end of frame
 #define AR      0x03    // Address field in frames that are commands sent by the Transmitter or replies sent by the Receiver
 #define AT      0x01    // Address field in frames that are commands sent by the Receiver or replies sent by the Transmitter

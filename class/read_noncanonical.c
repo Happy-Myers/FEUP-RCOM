@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
     int fd = open(serialPortName, O_RDWR | O_NOCTTY);
+    
     if (fd < 0)
     {
         perror(serialPortName);
