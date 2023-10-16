@@ -80,7 +80,7 @@ int set_fd(LinkLayer conParam){
 }
 
 
-int openChannel(int fd){
+int openChannel_Rx(int fd){
     
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
     volatile int STOP = FALSE;
@@ -131,13 +131,16 @@ int llopen(LinkLayer connectionParameters)
 {
     int fd = -1;
 
-    if(connectionParameters.role == LlRx){
-        if((fd = set_fd(connectionParameters)) > 0)
-            if(openChannel(fd) < 0) return -1;
+    if((fd = set_fd(connectionParameters)) > 0){
+        if(connectionParameters.role == LlRx){
+            if(openChannel_Rx(fd) < 0) return -1;
+        }
+        else{
+            // if(openChannel_Tx(fd) < 0) return -1;
+            // write TODO
+        }
     }
-    else{
-        // write TODO
-    }
+
     return fd;
 }
 
