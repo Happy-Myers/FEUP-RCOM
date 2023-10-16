@@ -18,15 +18,13 @@ LinkLayer buildConnectionParams(const char *serialPort, const char *role, int ba
     LinkLayer connectionParams;
 
     // Copy serialPort into the LinkLayer struct.
-    strncpy(connectionParams.serialPort, serialPort, sizeof(connectionParams.serialPort) - 1);
-    connectionParams.serialPort[sizeof(connectionParams.serialPort) - 1] = '\0'; // Ensure null-termination.
+    strcpy(connectionParams.serialPort, serialPort);
 
     connectionParams.baudRate = baudRate;
     connectionParams.nRetransmissions = nTries;
     connectionParams.timeout = timeout;
 
-    if(strcmp(role, "tx") == 0) connectionParams.role = LlTx;
-    else connectionParams.role = LlRx;
+    connectionParams.role = strcmp(role, "tx") ? LlRx : LlTx; 
 
     return connectionParams;
 }

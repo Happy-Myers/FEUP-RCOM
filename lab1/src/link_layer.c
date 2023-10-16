@@ -11,16 +11,22 @@
 #include <unistd.h>
 #include "link_layer.h"
 #include "utils.h"
-#include "read_noncanonical.h"
 
-enum STATE {
+volatile int STOP = FALSE;
+int alarmTriggered = FALSE;
+int alarmCount = 0;
+int timeout = 0;
+
+unsigned char byte;
+
+typedef enum {
     START,
     FLAG_RCV,
     A_RCV,
     C_RCV,
     BCC1_RCV,
     BCC2_RCV
-};
+} STATE;
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
@@ -56,7 +62,7 @@ int set_fd(LinkLayer conParam){
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 5;  // Blocking read until 5 chars received
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -80,47 +86,80 @@ int set_fd(LinkLayer conParam){
 }
 
 
-int openChannel_Rx(int fd){
+int testConnection_Rx(int fd, STATE state){
     
-    unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
-    volatile int STOP = FALSE;
-    enum STATE state = START;
-    
-    while(STOP == FALSE && (read(fd, buf, 1) > 0)){
-        buf[1] = '\0';
-        switch (state){
-        case START:
-            if(buf[0] == FLAG) state = FLAG_RCV;
-            break;
-        case FLAG_RCV:
-            if(buf[0] == AT) state = A_RCV;
-            else if (buf[0] != FLAG) state = START;
-            break;
-        case A_RCV:
-            if(buf[0] == SET) state = C_RCV;
-            else state = START;
-            break;
-        case C_RCV:
-            if(buf[0] == (AT ^ SET)) state = BCC1_RCV;
-            else state = START;
-            break;
-        case BCC1_RCV:
-            if(buf[0] == FLAG) STOP = TRUE;
-            else state = START;
-        default:
-            break;
+    while(STOP == FALSE){
+        if (read(fd, &byte, 1) > 0){
+            switch (state){
+                case START:
+                    if(byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if(byte == AT) state = A_RCV;
+                    else if (byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if(byte == SET) state = C_RCV;
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if(byte == (AT ^ SET)) state = BCC1_RCV;
+                    else if (byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case BCC1_RCV:
+                    if(byte == FLAG) STOP = TRUE;
+                    else state = START;
+                default:
+                    break;
+            }            
         }
+
     }
 
-    memset(buf, 0, BUF_SIZE);
-    buf[0] = FLAG;
-	buf[1] = AR;
-	buf[2] = UA;
-	buf[3] = AR ^ UA;
-	buf[4] = FLAG;
+    return sendReply(fd, AR, UA);
+}
 
-    if(write(fd, buf, 5) > 0) return 0;
-    else return -1;
+int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
+    (void) signal(SIGALRM, alarmHandler);
+    while(retransmissions != 0 && STOP == FALSE){
+        sendSFrame(fd, AT, SET);
+        alarm(timeout);
+        alarmTriggered = FALSE;
+
+        while(alarmTriggered == FALSE && STOP == FALSE){
+            if(read(fd, &byte, 1) > 0){
+                switch (state){
+                    case START:
+                        if(byte == FLAG) state = FLAG_RCV;
+                        break;
+                    case FLAG_RCV:
+                        if(byte == AR) state = A_RCV;
+                        else if (byte != FLAG) state = START;
+                        break;
+                    case A_RCV:
+                        if(byte == UA) state = C_RCV;
+                        else if(byte == FLAG) state = FLAG_RCV;
+                        else state = START;
+                        break;
+                    case C_RCV:
+                        if(byte == (AR ^ UA)) state = BCC1_RCV;
+                        else if (byte == FLAG) state = FLAG_RCV;
+                        else state = START;
+                        break;
+                    case BCC1_RCV:
+                        if(byte == FLAG) STOP = TRUE;
+                        else state = START;
+                    default:
+                        break;
+                }                
+            }
+
+        }
+        retransmissions--;
+    }
+    return STOP == FALSE ? -1 : 0;
 }
 
 
@@ -129,17 +168,21 @@ int openChannel_Rx(int fd){
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
-    int fd = -1;
+    STATE state = START;    
+    int fd = set_fd(connectionParameters);
+    if(fd < 0) return -1;
 
-    if((fd = set_fd(connectionParameters)) > 0){
-        if(connectionParameters.role == LlRx){
-            if(openChannel_Rx(fd) < 0) return -1;
-        }
-        else{
-            // if(openChannel_Tx(fd) < 0) return -1;
-            // write TODO
-        }
+    switch(connectionParameters.role){
+        case LlTx: //write
+            if(testConnection_Tx(fd, state, connectionParameters.nRetransmissions, connectionParameters.timeout) == -1) return -1;
+            break;
+        case LlRx: //read
+            testConnection_Rx(fd, state) == -1;
+            break;
+        default: 
+            return -1;
     }
+
 
     return fd;
 }
@@ -173,4 +216,15 @@ int llclose(int showStatistics)
     // TODO
 
     return 1;
+}
+
+
+int sendSFrame(int fd, unsigned char A, unsigned char C){
+    unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
+    return write(fd, buffer, 5);
+}
+
+void alarmHandler(int signal){
+    alarmTriggered = TRUE;
+    alarmCount++;
 }
