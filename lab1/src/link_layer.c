@@ -85,6 +85,15 @@ int set_fd(LinkLayer conParam){
     return fd;
 }
 
+int sendSFrame(int fd, unsigned char A, unsigned char C){
+    unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
+    return write(fd, buffer, 5);
+}
+
+void alarmHandler(int signal){
+    alarmTriggered = TRUE;
+    alarmCount++;
+}
 
 int testConnection_Rx(int fd, STATE state){
     
@@ -113,12 +122,12 @@ int testConnection_Rx(int fd, STATE state){
                     else state = START;
                 default:
                     break;
-            }            
+            }
+            printf("var = 0x%02X\n", byte);
         }
-
     }
 
-    return sendReply(fd, AR, UA);
+    return sendSFrame(fd, AR, UA);
 }
 
 int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
@@ -153,9 +162,9 @@ int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
                         else state = START;
                     default:
                         break;
-                }                
+                }
+                printf("var = 0x%02X\n", byte);
             }
-
         }
         retransmissions--;
     }
@@ -166,23 +175,22 @@ int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters)
+int llopen(LinkLayer connParam)
 {
     STATE state = START;    
-    int fd = set_fd(connectionParameters);
+    int fd = set_fd(connParam);
     if(fd < 0) return -1;
 
-    switch(connectionParameters.role){
+    switch(connParam.role){
         case LlTx: //write
-            if(testConnection_Tx(fd, state, connectionParameters.nRetransmissions, connectionParameters.timeout) == -1) return -1;
+            if(testConnection_Tx(fd, state, connParam.nRetransmissions, connParam.timeout) == -1) return -1;
             break;
         case LlRx: //read
-            testConnection_Rx(fd, state) == -1;
+            testConnection_Rx(fd, state);
             break;
         default: 
             return -1;
     }
-
 
     return fd;
 }
@@ -216,15 +224,4 @@ int llclose(int showStatistics)
     // TODO
 
     return 1;
-}
-
-
-int sendSFrame(int fd, unsigned char A, unsigned char C){
-    unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
-    return write(fd, buffer, 5);
-}
-
-void alarmHandler(int signal){
-    alarmTriggered = TRUE;
-    alarmCount++;
 }
