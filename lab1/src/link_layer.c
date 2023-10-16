@@ -30,15 +30,44 @@ int openChannel(int fd){
     
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
     volatile int STOP = FALSE;
+    enum STATE state = START;
     
     while(STOP == FALSE && (read(fd, buf, 1) > 0)){
-        STOP = TRUE;
+        buf[1] = '\0';
+        switch (state){
+        case START:
+            if(buf[0] == FLAG) state = FLAG_RCV;
+            break;
+        case FLAG_RCV:
+            if(buf[0] == AT) state = A_RCV;
+            else if (buf[0] != FLAG) state = START;
+            break;
+        case A_RCV:
+            if(buf[0] == SET) state = C_RCV;
+            else state = START;
+            break;
+        case C_RCV:
+            if(buf[0] == (AT ^ SET)) state = BCC1_RCV;
+            else state = START;
+            break;
+        case BCC1_RCV:
+            if(buf[0] == FLAG) STOP = TRUE;
+            else state = START;
+        default:
+            break;
+        }
     }
 
-    return 0;
+    memset(buf, 0, BUF_SIZE);
+    buf[0] = FLAG;
+	buf[1] = AR;
+	buf[2] = UA;
+	buf[3] = AR ^ UA;
+	buf[4] = FLAG;
+
+    if(write(fd, buf, 5) > 0) return 0;
+    else return -1;
 }
-
-
 
 
 ////////////////////////////////////////////////
@@ -46,14 +75,16 @@ int openChannel(int fd){
 ////////////////////////////////////////////////
 int llopen(LinkLayer connectionParameters)
 {
+    int fd = -1;
 
-    // TODO
-    // openChannel();
     if(connectionParameters.role == LlRx){
-        int fd = read_noncanonical(connectionParameters);
-        openChannel(fd);
+        if((fd = read_noncanonical(connectionParameters)) > 0)
+            if(openChannel(fd) < 0) return -1;
     }
-    return 1;
+    else{
+        // write TODO
+    }
+    return fd;
 }
 
 

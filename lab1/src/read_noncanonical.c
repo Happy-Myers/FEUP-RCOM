@@ -55,5 +55,5 @@ int read_noncanonical(LinkLayer conParam){
     }
 
     printf("New termios structure set\n");
-    return 0;
+    return fd;
 }
