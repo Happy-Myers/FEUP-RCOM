@@ -184,9 +184,55 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
+    int frameSize = bufSize + 6; // buf contains data 
+    unsigned char *frame = (unsigned char *) malloc(frameSize);
+
+    frame[0] = FLAG;
+    frame[1] = AT;
+    frame[2] = CI_1;
+    frame[3] = frame[1] ^ frame[2]; //BCC1
+
+    memcpy(frame+4, buf, bufSize);
+
+    unsigned char bcc2 = 0;
+
+    for(int i = 0; i < bufSize; i++){
+        bcc2 = bcc2 ^ buf[i];
+    }
+
+    int currIndex = 4;
+
+    for(int i = 0; i < bufSize; i++){
+        if(buf[i] == FLAG || buf[i] == ESC_B1)
+            updateFrame(&frame, &frameSize, &currIndex, buf[i]);
+        currIndex++;
+    }
+
+    frame[frameSize-2] = bcc2;
+    frame[frameSize-1] = FLAG;
+
+    // verify if transmission was successful
 
     return 0;
+}
+
+void updateFrame(unsigned char *frame, unsigned int *frameSize, int *currIndex, unsigned char flag){
+    frame = (unsigned char *)realloc(frame, *++frameSize);
+    for(int i = currIndex; i < *frameSize; i++){
+        frame[i+1] = frame[i];
+    }
+
+    switch(flag){
+        case FLAG:
+            frame[*currIndex++] = ESC_B1;
+            frame[*currIndex] = ESC_B2;
+            break;
+        case ESC_B1:
+            frame[*++currIndex] = ESC_B3;
+            break;
+        default: 
+            break;
+    }
 }
 
 ////////////////////////////////////////////////
