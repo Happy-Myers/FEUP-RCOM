@@ -125,21 +125,10 @@ void alarmHandler(int signal){
     alarmCount++;
 }
 
-int testConnection_Rx(STATE state){
-    
-    while(STOP == FALSE){
-        if (read(fd, &byte, 1) > 0){
-            readSFrame(state, AT, SET);
-        }
-    }
-
-    return sendSFrame(AR, UA);
-}
-
-int testConnection_Tx(STATE state, int retransmissions, int timeout){
+int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     while(retransmissions != 0 && STOP == FALSE){
-        sendSFrame(AT, SET);
+        sendSFrame(fd, AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
 
@@ -151,6 +140,39 @@ int testConnection_Tx(STATE state, int retransmissions, int timeout){
         retransmissions--;
     }
     return STOP == FALSE ? -1 : 0;
+}
+
+int testConnection_Rx(int fd, STATE state){
+    
+    while(STOP == FALSE){
+        if (read(fd, &byte, 1) > 0){
+            readSFrame(state, AT, SET);
+        }
+    }
+
+    return sendSFrame(AR, UA);
+}
+
+int closeConnection_Tx(int fd, STATE state){
+    // TODO
+}
+
+int closeConnection_Rx(int fd, STATE state){
+    readSFrame(state, AT, DISC);
+    (void) signal(SIGALRM, alarmHandler);
+    while(retransmissions != 0 && STOP == FALSE){
+        sendSFrame(AT, SET);
+        alarm(timeout);
+        alarmTriggered = FALSE;
+
+        while(alarmTriggered == FALSE && STOP == FALSE){
+            if(read(fd, &byte, 1) > 0){
+                readSFrame(state, AR, DISC);
+            }
+        }
+        retransmissions--;
+    }
+    readSFrame(state, AT, UA);
 }
 
 
