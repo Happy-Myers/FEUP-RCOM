@@ -12,10 +12,14 @@
 #include "link_layer.h"
 #include "utils.h"
 
+// MISC
+#define _POSIX_SOURCE 1 // POSIX compliant source
+
 volatile int STOP = FALSE;
 int alarmTriggered = FALSE;
 int alarmCount = 0;
 int timeout = 0;
+LinkLayer connParams;
 
 unsigned char byte;
 
@@ -27,9 +31,6 @@ typedef enum {
     BCC1_RCV,
     BCC2_RCV
 } STATE;
-
-// MISC
-#define _POSIX_SOURCE 1 // POSIX compliant source
 
 int set_fd(LinkLayer conParam){
 
@@ -90,6 +91,34 @@ int sendSFrame(int fd, unsigned char A, unsigned char C){
     return write(fd, buffer, 5);
 }
 
+void readSFrame(STATE state, unsigned char A, unsigned char C){
+    switch (state){
+        case START:
+            if(byte == FLAG) state = FLAG_RCV;
+            break;
+        case FLAG_RCV:
+            if(byte == AT) state = A_RCV;
+            else if (byte != FLAG) state = START;
+            break;
+        case A_RCV:
+            if(byte == SET) state = C_RCV;
+            else if(byte == FLAG) state = FLAG_RCV;
+            else state = START;
+            break;
+        case C_RCV:
+            if(byte == (AT ^ SET)) state = BCC1_RCV;
+            else if (byte == FLAG) state = FLAG_RCV;
+            else state = START;
+            break;
+        case BCC1_RCV:
+            if(byte == FLAG) STOP = TRUE;
+            else state = START;
+        default:
+            break;
+    }
+    printf("var = 0x%02X\n", byte);
+}
+
 void alarmHandler(int signal){
     alarmTriggered = TRUE;
     alarmCount++;
@@ -99,31 +128,7 @@ int testConnection_Rx(int fd, STATE state){
     
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
-            switch (state){
-                case START:
-                    if(byte == FLAG) state = FLAG_RCV;
-                    break;
-                case FLAG_RCV:
-                    if(byte == AT) state = A_RCV;
-                    else if (byte != FLAG) state = START;
-                    break;
-                case A_RCV:
-                    if(byte == SET) state = C_RCV;
-                    else if(byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case C_RCV:
-                    if(byte == (AT ^ SET)) state = BCC1_RCV;
-                    else if (byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case BCC1_RCV:
-                    if(byte == FLAG) STOP = TRUE;
-                    else state = START;
-                default:
-                    break;
-            }
-            printf("var = 0x%02X\n", byte);
+            readSFrame(state, AT, SET);
         }
     }
 
@@ -139,31 +144,7 @@ int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
 
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
-                switch (state){
-                    case START:
-                        if(byte == FLAG) state = FLAG_RCV;
-                        break;
-                    case FLAG_RCV:
-                        if(byte == AR) state = A_RCV;
-                        else if (byte != FLAG) state = START;
-                        break;
-                    case A_RCV:
-                        if(byte == UA) state = C_RCV;
-                        else if(byte == FLAG) state = FLAG_RCV;
-                        else state = START;
-                        break;
-                    case C_RCV:
-                        if(byte == (AR ^ UA)) state = BCC1_RCV;
-                        else if (byte == FLAG) state = FLAG_RCV;
-                        else state = START;
-                        break;
-                    case BCC1_RCV:
-                        if(byte == FLAG) STOP = TRUE;
-                        else state = START;
-                    default:
-                        break;
-                }
-                printf("var = 0x%02X\n", byte);
+                readSFrame(state, AR, UA);
             }
         }
         retransmissions--;
@@ -175,15 +156,16 @@ int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connParam)
+int llopen(LinkLayer connectionParameters)
 {
+    connParams = connectionParameters;
     STATE state = START;    
-    int fd = set_fd(connParam);
+    int fd = set_fd(connParams);
     if(fd < 0) return -1;
 
-    switch(connParam.role){
+    switch(connParams.role){
         case LlTx: //write
-            if(testConnection_Tx(fd, state, connParam.nRetransmissions, connParam.timeout) == -1) return -1;
+            if(testConnection_Tx(fd, state, connParams.nRetransmissions, connParams.timeout) == -1) return -1;
             break;
         case LlRx: //read
             testConnection_Rx(fd, state);
@@ -221,7 +203,22 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int showStatistics)
 {
+    // STATE state = START;
+    // int fd = showStatistics;
     // TODO
-
+    switch(connParams.role){
+        case LlTx: //write
+            // sendSFrame(fd, AT, DISC);
+            // readSFrame(state, AR, DISC);
+            // sendSFrame(fd, AT, UA);
+            break;
+        case LlRx: //read
+            // readSFrame(state, AT, DISC);
+            // sendSFrame(fd, AR, DISC);
+            // readSFrame(state, AT, UA);
+            break;
+        default: 
+            return -1;
+    }
     return 1;
 }

@@ -30,16 +30,30 @@ LinkLayer buildConnectionParams(const char *serialPort, const char *role, int ba
 }
 
 
+int trasmitterTasks(){
+    //llwrite()
+    return 0;
+}
+
+
+int receiverTasks(){
+    //llread();
+    return 0;
+}
+
+
+
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate,
                                                         nTries, timeout);
+    int fd = llopen(connectionParams);
 
     // Rx faz OPEN
     // Tx faz OPEN e envia Trama de Supervisão (S) com SET
     // Rx responde à Trama de Supervisão (S) com UA
-    if(llopen(connectionParams) < 0){
+    if((fd = llopen(connectionParams)) < 0){
         printf("erro no llopen()\n");
         exit(-1);
     }
@@ -58,4 +72,8 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 
     // llclose
+    if(llclose(fd) < 0){
+        printf("erro no llclose()\n");
+        exit(-1);
+    }
 }
