@@ -53,7 +53,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // Rx faz OPEN
     // Tx faz OPEN e envia Trama de Supervisão (S) com SET
     // Rx responde à Trama de Supervisão (S) com UA
-    if((fd = llopen(connectionParams)) < 0){
+    if(fd < 0){
         printf("erro no llopen()\n");
         exit(-1);
     }

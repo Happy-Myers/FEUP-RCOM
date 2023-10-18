@@ -20,6 +20,7 @@ int alarmTriggered = FALSE;
 int alarmCount = 0;
 int timeout = 0;
 LinkLayer connParams;
+int fd;
 
 unsigned char byte;
 
@@ -32,11 +33,11 @@ typedef enum {
     BCC2_RCV
 } STATE;
 
-int set_fd(LinkLayer conParam){
+void set_fd(LinkLayer conParam){
 
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
-    int fd = open(conParam.serialPort, O_RDWR | O_NOCTTY);
+    fd = open(conParam.serialPort, O_RDWR | O_NOCTTY);
     if (fd < 0)
     {
         perror(conParam.serialPort);
@@ -86,7 +87,7 @@ int set_fd(LinkLayer conParam){
     return fd;
 }
 
-int sendSFrame(int fd, unsigned char A, unsigned char C){
+int sendSFrame(unsigned char A, unsigned char C){
     unsigned char buffer[5] = {FLAG, A, C, A ^ C, FLAG};
     return write(fd, buffer, 5);
 }
@@ -124,7 +125,7 @@ void alarmHandler(int signal){
     alarmCount++;
 }
 
-int testConnection_Rx(int fd, STATE state){
+int testConnection_Rx(STATE state){
     
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
@@ -132,13 +133,13 @@ int testConnection_Rx(int fd, STATE state){
         }
     }
 
-    return sendSFrame(fd, AR, UA);
+    return sendSFrame(AR, UA);
 }
 
-int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
+int testConnection_Tx(STATE state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     while(retransmissions != 0 && STOP == FALSE){
-        sendSFrame(fd, AT, SET);
+        sendSFrame(AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
 
@@ -160,15 +161,15 @@ int llopen(LinkLayer connectionParameters)
 {
     connParams = connectionParameters;
     STATE state = START;    
-    int fd = set_fd(connParams);
+    set_fd(connParams);
     if(fd < 0) return -1;
 
     switch(connParams.role){
         case LlTx: //write
-            if(testConnection_Tx(fd, state, connParams.nRetransmissions, connParams.timeout) == -1) return -1;
+            if(testConnection_Tx(state, connParams.nRetransmissions, connParams.timeout) == -1) return -1;
             break;
         case LlRx: //read
-            testConnection_Rx(fd, state);
+            testConnection_Rx(state);
             break;
         default: 
             return -1;
