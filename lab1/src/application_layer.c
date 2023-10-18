@@ -50,16 +50,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                                                         nTries, timeout);
     int fd = llopen(connectionParams);
 
-    // Rx faz OPEN
-    // Tx faz OPEN e envia Trama de Supervisão (S) com SET
-    // Rx responde à Trama de Supervisão (S) com UA
+
     if(fd < 0){
         printf("erro no llopen()\n");
+        if(llclose(fd) < 0){
+            printf("erro no llclose()\n");
+        }
         exit(-1);
     }
-    // open file (?)
-    // llopen
-    // retorna (in)sucesso
 
     // llwrite (controlo)
     // while (llwrite [imagem])
@@ -69,7 +67,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // llread (controlo)
     // while (llread[imagem])
     // llread(controlo)
-
 
     // llclose
     if(llclose(fd) < 0){

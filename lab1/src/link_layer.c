@@ -15,12 +15,14 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
+struct termios oldtio;
+LinkLayer connParams;
+int fd;
+
 volatile int STOP = FALSE;
 int alarmTriggered = FALSE;
 int alarmCount = 0;
 int timeout = 0;
-LinkLayer connParams;
-int fd;
 
 unsigned char byte;
 
@@ -38,20 +40,17 @@ int set_fd(LinkLayer conParam){
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
     fd = open(conParam.serialPort, O_RDWR | O_NOCTTY);
-    if (fd < 0)
-    {
+    if (fd < 0){
         perror(conParam.serialPort);
-        exit(-1);
+        return -1;
     }
 
-    struct termios oldtio;
     struct termios newtio;
 
     // Save current port settings
-    if (tcgetattr(fd, &oldtio) == -1)
-    {
+    if (tcgetattr(fd, &oldtio) == -1){
         perror("tcgetattr");
-        exit(-1);
+        return -1;
     }
 
     // Clear struct for new port settings
@@ -77,10 +76,9 @@ int set_fd(LinkLayer conParam){
     tcflush(fd, TCIOFLUSH);
 
     // Set new port settings
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-    {
+    if (tcsetattr(fd, TCSANOW, &newtio) == -1){
         perror("tcsetattr");
-        exit(-1);
+        return -1;
     }
 
     printf("New termios structure set\n");
@@ -181,19 +179,19 @@ void closeConnection_Rx(STATE state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
     readSFrame(state, AT, DISC);
+    state = START;
     while(retry != 0 && STOP == FALSE){
-        sendSFrame(AT, SET);
+        sendSFrame(AR, DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
 
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
-                readSFrame(state, AR, DISC);
+                readSFrame(state, AT, UA);
             }
         }
         retry--;
     }
-    readSFrame(state, AT, UA);
 }
 
 
@@ -225,14 +223,13 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 // LLWRITE
 ////////////////////////////////////////////////
-int llwrite(const unsigned char *buf, int bufSize)
-{
+int llwrite(const unsigned char *buf, int bufSize){
     unsigned int frameSize = bufSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
 
     frame[0] = FLAG;
     frame[1] = AT;
-    frame[2] = CI_1;
+    frame[2] = CI_0;
     frame[3] = frame[1] ^ frame[2]; //BCC1
 
     memcpy(frame+4, buf, bufSize);
@@ -262,8 +259,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
-int llread(unsigned char *packet)
-{
+int llread(unsigned char *packet){
     // TODO
 
     return 0;
@@ -272,21 +268,24 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
-int llclose(int showStatistics)
-{
+int llclose(int showStatistics){
     STATE state = START;
 
-    switch(connParams.role){
-        case LlTx: //write
-            // sendSFrame(AT, DISC);
-            // readSFrame(state, AR, DISC);
-            // sendSFrame(AT, UA);
-            break;
-        case LlRx: //read
-            closeConnection_Rx(state, connParams.nRetransmissions, connParams.timeout);
-            break;
-        default: 
-            return -1;
+    if(connParams.role == LlTx){
+        // sendSFrame(AT, DISC);
+        // readSFrame(state, AR, DISC);
+        // sendSFrame(AT, UA);
     }
-    return 1;
+    else{
+        closeConnection_Rx(state, connParams.nRetransmissions, connParams.timeout);
+    }
+
+    // Restore the old port settings
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1){
+        perror("tcsetattr");
+        return -1;
+    }
+
+    close(fd);
+    return 0;
 }
