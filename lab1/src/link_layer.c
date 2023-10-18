@@ -33,7 +33,7 @@ typedef enum {
     BCC2_RCV
 } STATE;
 
-void set_fd(LinkLayer conParam){
+int set_fd(LinkLayer conParam){
 
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
@@ -125,10 +125,11 @@ void alarmHandler(int signal){
     alarmCount++;
 }
 
-int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
+int testConnection_Tx(STATE state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
-    while(retransmissions != 0 && STOP == FALSE){
-        sendSFrame(fd, AT, SET);
+    int retry = retransmissions;
+    while(retry != 0 && STOP == FALSE){
+        sendSFrame(AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
 
@@ -137,12 +138,12 @@ int testConnection_Tx(int fd, STATE state, int retransmissions, int timeout){
                 readSFrame(state, AR, UA);
             }
         }
-        retransmissions--;
+        retry--;
     }
     return STOP == FALSE ? -1 : 0;
 }
 
-int testConnection_Rx(int fd, STATE state){
+int testConnection_Rx(STATE state){
     
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
@@ -153,14 +154,34 @@ int testConnection_Rx(int fd, STATE state){
     return sendSFrame(AR, UA);
 }
 
-int closeConnection_Tx(int fd, STATE state){
+void updateFrame(unsigned char *frame, unsigned int *frameSize, int *currIndex, unsigned char flag){
+    frame = (unsigned char *)realloc(frame, *++frameSize);
+    for(int i = *currIndex; i < *frameSize; i++){
+        frame[i+1] = frame[i];
+    }
+
+    switch(flag){
+        case FLAG:
+            frame[*currIndex++] = ESC_B1;
+            frame[*currIndex] = ESC_B2;
+            break;
+        case ESC_B1:
+            frame[*++currIndex] = ESC_B3;
+            break;
+        default: 
+            break;
+    }
+}
+
+void closeConnection_Tx(STATE state, int retransmissions, int timeout){
     // TODO
 }
 
-int closeConnection_Rx(int fd, STATE state){
-    readSFrame(state, AT, DISC);
+void closeConnection_Rx(STATE state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
-    while(retransmissions != 0 && STOP == FALSE){
+    int retry = retransmissions;
+    readSFrame(state, AT, DISC);
+    while(retry != 0 && STOP == FALSE){
         sendSFrame(AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
@@ -170,7 +191,7 @@ int closeConnection_Rx(int fd, STATE state){
                 readSFrame(state, AR, DISC);
             }
         }
-        retransmissions--;
+        retry--;
     }
     readSFrame(state, AT, UA);
 }
@@ -206,7 +227,7 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    int frameSize = bufSize + 6; // buf contains data 
+    unsigned int frameSize = bufSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
 
     frame[0] = FLAG;
@@ -226,7 +247,7 @@ int llwrite(const unsigned char *buf, int bufSize)
 
     for(int i = 0; i < bufSize; i++){
         if(buf[i] == FLAG || buf[i] == ESC_B1)
-            updateFrame(&frame, &frameSize, &currIndex, buf[i]);
+            updateFrame(frame, &frameSize, &currIndex, buf[i]);
         currIndex++;
     }
 
@@ -236,25 +257,6 @@ int llwrite(const unsigned char *buf, int bufSize)
     // verify if transmission was successful
 
     return 0;
-}
-
-void updateFrame(unsigned char *frame, unsigned int *frameSize, int *currIndex, unsigned char flag){
-    frame = (unsigned char *)realloc(frame, *++frameSize);
-    for(int i = currIndex; i < *frameSize; i++){
-        frame[i+1] = frame[i];
-    }
-
-    switch(flag){
-        case FLAG:
-            frame[*currIndex++] = ESC_B1;
-            frame[*currIndex] = ESC_B2;
-            break;
-        case ESC_B1:
-            frame[*++currIndex] = ESC_B3;
-            break;
-        default: 
-            break;
-    }
 }
 
 ////////////////////////////////////////////////
@@ -272,19 +274,16 @@ int llread(unsigned char *packet)
 ////////////////////////////////////////////////
 int llclose(int showStatistics)
 {
-    // STATE state = START;
-    // int fd = showStatistics;
-    // TODO
+    STATE state = START;
+
     switch(connParams.role){
         case LlTx: //write
-            // sendSFrame(fd, AT, DISC);
+            // sendSFrame(AT, DISC);
             // readSFrame(state, AR, DISC);
-            // sendSFrame(fd, AT, UA);
+            // sendSFrame(AT, UA);
             break;
         case LlRx: //read
-            // readSFrame(state, AT, DISC);
-            // sendSFrame(fd, AR, DISC);
-            // readSFrame(state, AT, UA);
+            closeConnection_Rx(state, connParams.nRetransmissions, connParams.timeout);
             break;
         default: 
             return -1;
