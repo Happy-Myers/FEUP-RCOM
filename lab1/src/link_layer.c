@@ -21,8 +21,8 @@ int fd;
 
 volatile int STOP = FALSE;
 int alarmTriggered = FALSE;
-int alarmCount = 0;
-int timeout = 0;
+
+int frameNumTx = 0;
 
 unsigned char byte;
 
@@ -119,7 +119,6 @@ void readSFrame(STATE *state, unsigned char A, unsigned char C){
 
 void alarmHandler(int signal){
     alarmTriggered = TRUE;
-    alarmCount++;
 }
 
 int testConnection_Tx(STATE *state, int retransmissions, int timeout){
@@ -249,10 +248,11 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize){
     unsigned int frameSize = bufSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
+    int extraChars = 0;
 
     frame[0] = FLAG;
     frame[1] = AT;
-    frame[2] = CI_0;
+    frame[2] = frameNumTx == 0 ? CI_0 : CI_1;
     frame[3] = frame[1] ^ frame[2]; //BCC1
 
     memcpy(frame+4, buf, bufSize);
@@ -266,8 +266,11 @@ int llwrite(const unsigned char *buf, int bufSize){
     int currIndex = 4;
 
     for(int i = 0; i < bufSize; i++){
-        if(buf[i] == FLAG || buf[i] == ESC_B1)
+        if(buf[i] == FLAG || buf[i] == ESC_B1){
             updateFrame(frame, &frameSize, &currIndex, buf[i]);
+            extraChars++;
+        }
+            
         currIndex++;
     }
 
@@ -276,7 +279,80 @@ int llwrite(const unsigned char *buf, int bufSize){
 
     // verify if transmission was successful
 
-    return 0;
+    int transmissionNum = 0;
+    int retransmission = connParams.nRetransmissions;
+    int accepted = FALSE;
+    int rejected = FALSE;
+    
+
+    while(transmissionNum < retransmission){
+        alarmTriggered = FALSE;
+        alarm(connParams.timeout);
+
+        while(alarmTriggered == FALSE && !rejected && !accepted){
+            write(fd, frame, frameSize + extraChars);
+            unsigned char response = readControl();
+
+            if(response == 0)
+                continue;
+            else if(response == RR0 || response == RR1){
+                accepted = TRUE;
+                frameNumTx = (frameNumTx + 1) % 2;
+            }
+            else if(response == REJ0 || response == REJ1)
+                rejected = TRUE;
+            else continue;
+        }
+        if(accepted == TRUE) break;
+        transmissionNum++;
+    }
+    free(frame);
+    if(accepted == TRUE)
+        return 0;
+    else{
+        llclose(0);
+        return -1;
+    }
+}
+
+
+unsigned char readControl(){
+    STATE state = START;
+    STOP = FALSE;
+    unsigned char c = 0;
+    while(STOP == FALSE && alarmTriggered == FALSE){
+        if(read(fd, &byte, 1) > 0){
+            switch(state){
+                case START:
+                    if(byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if(byte == AR) state = A_RCV;
+                    else if(byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if(byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1){
+                        c = byte;
+                        state = C_RCV;
+                    }
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if(byte == (AR ^ c)) state = BCC1_RCV;
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case BCC1_RCV:
+                    if(byte == FLAG) STOP = TRUE;
+                    else state = START;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    return c;
 }
 
 ////////////////////////////////////////////////
