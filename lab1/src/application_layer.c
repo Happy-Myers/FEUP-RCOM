@@ -48,6 +48,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 {
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate,
                                                         nTries, timeout);
+    printf("\n---- OPEN PROTOCOL ----\n");
     int fd = llopen(connectionParams);
 
 
@@ -69,6 +70,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     // llread(controlo)
 
     // llclose
+    printf("\n---- CLOSE PROTOCOL ----\n");
     if(llclose(fd) < 0){
         printf("erro no llclose()\n");
         exit(-1);

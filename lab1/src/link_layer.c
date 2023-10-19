@@ -90,23 +90,23 @@ int sendSFrame(unsigned char A, unsigned char C){
     return write(fd, buffer, 5);
 }
 
-void readSFrame(STATE state, unsigned char A, unsigned char C){
-    switch (state){
+void readSFrame(STATE *state, unsigned char A, unsigned char C){
+    switch (*state){
         case START:
-            if(byte == FLAG) state = FLAG_RCV;
+            if(byte == FLAG) *state = FLAG_RCV;
             break;
         case FLAG_RCV:
-            if(byte == AT) state = A_RCV;
-            else if (byte != FLAG) state = START;
+            if(byte == A) *state = A_RCV;
+            else if (byte != FLAG) *state = START;
             break;
         case A_RCV:
-            if(byte == SET) state = C_RCV;
-            else if(byte == FLAG) state = FLAG_RCV;
+            if(byte == C) *state = C_RCV;
+            else if(byte == FLAG) *state = FLAG_RCV;
             else state = START;
             break;
         case C_RCV:
-            if(byte == (AT ^ SET)) state = BCC1_RCV;
-            else if (byte == FLAG) state = FLAG_RCV;
+            if(byte == (A ^ C)) *state = BCC1_RCV;
+            else if (byte == FLAG) *state = FLAG_RCV;
             else state = START;
             break;
         case BCC1_RCV:
@@ -115,7 +115,6 @@ void readSFrame(STATE state, unsigned char A, unsigned char C){
         default:
             break;
     }
-    printf("var = 0x%02X\n", byte);
 }
 
 void alarmHandler(int signal){
@@ -123,17 +122,19 @@ void alarmHandler(int signal){
     alarmCount++;
 }
 
-int testConnection_Tx(STATE state, int retransmissions, int timeout){
+int testConnection_Tx(STATE *state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
     while(retry != 0 && STOP == FALSE){
+        printf("Sending SET command\n");
         sendSFrame(AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
 
+        printf("Receiving UA command\n");
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
-                readSFrame(state, AR, UA);
+                readSFrame(&*state, AR, UA);
             }
         }
         retry--;
@@ -141,14 +142,15 @@ int testConnection_Tx(STATE state, int retransmissions, int timeout){
     return STOP == FALSE ? -1 : 0;
 }
 
-int testConnection_Rx(STATE state){
-    
+int testConnection_Rx(STATE *state){
+    printf("Receiving SET command\n");
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
-            readSFrame(state, AT, SET);
+            readSFrame(&*state, AT, SET);
         }
     }
 
+    printf("Sending UA command\n");
     return sendSFrame(AR, UA);
 }
 
@@ -171,23 +173,46 @@ void updateFrame(unsigned char *frame, unsigned int *frameSize, int *currIndex, 
     }
 }
 
-void closeConnection_Tx(STATE state, int retransmissions, int timeout){
-    // TODO
-}
-
-void closeConnection_Rx(STATE state, int retransmissions, int timeout){
+void closeConnection_Tx(STATE *state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
-    readSFrame(state, AT, DISC);
-    state = START;
+
     while(retry != 0 && STOP == FALSE){
+        printf("Sending DISC command\n");
+        sendSFrame(AT, DISC);
+        alarm(timeout);
+        alarmTriggered = FALSE;
+
+        printf("Receiving DISC command\n");
+        while(alarmTriggered == FALSE && STOP == FALSE){
+            if(read(fd, &byte, 1) > 0){
+                readSFrame(&*state, AR, DISC);
+            }
+        }
+        retry--;
+    }
+
+    printf("Sending UA command\n");
+    sendSFrame(AT, UA);
+}
+
+void closeConnection_Rx(STATE *state, int retransmissions, int timeout){
+    (void) signal(SIGALRM, alarmHandler);
+    int retry = retransmissions;
+
+    printf("Receiving DISC command\n");
+    readSFrame(&*state, AT, DISC);
+
+    while(retry != 0 && STOP == FALSE){
+        printf("Sending DISC command\n");
         sendSFrame(AR, DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
 
+        printf("Receiving UA command\n");
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
-                readSFrame(state, AT, UA);
+                readSFrame(&*state, AT, UA);
             }
         }
         retry--;
@@ -205,14 +230,12 @@ int llopen(LinkLayer connectionParameters)
     set_fd(connParams);
     if(fd < 0) return -1;
 
-    switch(connParams.role){
-        case LlTx: //write
-            if(testConnection_Tx(state, connParams.nRetransmissions, connParams.timeout) == -1) return -1;
-            break;
-        case LlRx: //read
-            testConnection_Rx(state);
-            break;
-        default: 
+    STOP = FALSE;
+    if(connParams.role == LlTx){
+        if(testConnection_Tx(&state, connParams.nRetransmissions, connParams.timeout) < 0)
+            return -1;
+    } else{
+        if(testConnection_Rx(&state) < 0)
             return -1;
     }
 
@@ -271,14 +294,11 @@ int llread(unsigned char *packet){
 int llclose(int showStatistics){
     STATE state = START;
 
-    if(connParams.role == LlTx){
-        // sendSFrame(AT, DISC);
-        // readSFrame(state, AR, DISC);
-        // sendSFrame(AT, UA);
-    }
-    else{
-        closeConnection_Rx(state, connParams.nRetransmissions, connParams.timeout);
-    }
+    STOP = FALSE;
+    if(connParams.role == LlTx)
+        closeConnection_Tx(&state, connParams.nRetransmissions, connParams.timeout);
+    else
+        closeConnection_Rx(&state, connParams.nRetransmissions, connParams.timeout);
 
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1){
