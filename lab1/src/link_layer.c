@@ -121,45 +121,6 @@ void readSFrame(STATE *state, unsigned char A, unsigned char C){
     }
 }
 
-unsigned char readControl(){
-    STATE state = START;
-    STOP = FALSE;
-    unsigned char c = 0;
-    while(STOP == FALSE && alarmTriggered == FALSE){
-        if(read(fd, &byte, 1) > 0){
-            switch(state){
-                case START:
-                    if(byte == FLAG) state = FLAG_RCV;
-                    break;
-                case FLAG_RCV:
-                    if(byte == AR) state = A_RCV;
-                    else if(byte != FLAG) state = START;
-                    break;
-                case A_RCV:
-                    if(byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1){
-                        c = byte;
-                        state = C_RCV;
-                    }
-                    else if(byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case C_RCV:
-                    if(byte == (AR ^ c)) state = BCC1_RCV;
-                    else if(byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case BCC1_RCV:
-                    if(byte == FLAG) STOP = TRUE;
-                    else state = START;
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-    return c;
-}
-
 void alarmHandler(int signal){
     alarmTriggered = TRUE;
 }
@@ -357,35 +318,11 @@ int llwrite(const unsigned char *buf, int bufSize){
 }
 
 ////////////////////////////////////////////////
-// LLCLOSE
-////////////////////////////////////////////////
-int llclose(int showStatistics){
-    STATE state = START;
-
-    STOP = FALSE;
-    if(connParams.role == LlTx)
-        closeConnection_Tx(&state, connParams.nRetransmissions, connParams.timeout);
-    else
-        closeConnection_Rx(&state, connParams.nRetransmissions, connParams.timeout);
-
-    // Restore the old port settings
-    if (tcsetattr(fd, TCSANOW, &oldtio) == -1){
-        perror("tcsetattr");
-        return -1;
-    }
-
-    close(fd);
-    return 0;
-}
-
-////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
 int llread(unsigned char *packet){
 
-    unsigned char *c_frame = (unsigned char *) malloc(H_SIZE + C_SIZE);
     STATE state = START;
-    int isControl = FALSE;
     unsigned char c = 0;
     int index = 0;
 
@@ -442,5 +379,28 @@ int llread(unsigned char *packet){
             }
         }
     }
+    return 0;
+}
+
+
+////////////////////////////////////////////////
+// LLCLOSE
+////////////////////////////////////////////////
+int llclose(int showStatistics){
+    STATE state = START;
+
+    STOP = FALSE;
+    if(connParams.role == LlTx)
+        closeConnection_Tx(&state, connParams.nRetransmissions, connParams.timeout);
+    else
+        closeConnection_Rx(&state, connParams.nRetransmissions, connParams.timeout);
+
+    // Restore the old port settings
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1){
+        perror("tcsetattr");
+        return -1;
+    }
+
+    close(fd);
     return 0;
 }
