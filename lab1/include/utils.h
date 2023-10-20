@@ -24,5 +24,16 @@
 /* Tramas I */
 #define CI_0    0x00    // Information frame number 0
 #define CI_1    0x40    // Information frame number 1
+#define SIZE    0x00    // File Size: Control Package byte corresponding to the File Size
+#define F_NAME  0x01    // File Name: Control Package byte corresponding to the File Name
+
+#define H_SIZE  6       // Header Size: Number of Bytes in the Frame Header
+#define D_SIZE  3       // Data Frame Size: Minimum number of additional Bytes in the Data Frame
+#define C_SIZE  5       // Control Frame Size: Minimum number of additional Bytes in the Control Frame
+
+#define CF_1    1       // Control Field 1: Control Field value related to Data Frame
+#define CF_2    2       // Control Field 2: Control Field value related to Control Frame 1
+#define CF_3    3       // Control Field 3: Control Field value related to Control Frame 2
+
 
 #endif // _UTILS_H

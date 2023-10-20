@@ -20,11 +20,19 @@ LinkLayer connParams;
 int fd;
 
 volatile int STOP = FALSE;
+volatile int WAIT_BYTE = FALSE;
+volatile int CONTROL_FRAME = TRUE;
 int alarmTriggered = FALSE;
 
 int frameNumTx = 0;
 
 unsigned char byte;
+unsigned short data_size; 
+unsigned char BCC_2;
+unsigned char file_size;
+unsigned char *file_name;
+int read_file_size;
+
 
 typedef enum {
     START,
@@ -34,6 +42,17 @@ typedef enum {
     BCC1_RCV,
     BCC2_RCV
 } STATE;
+
+typedef enum {
+    C_RCV,
+    L2_RCV,
+    L1_RCV,
+    DATA_RCV,
+    T_RCV,
+    L_RCV,
+    V_RCV
+} CTRL_STATE;
+
 
 int set_fd(LinkLayer conParam){
 
@@ -115,6 +134,45 @@ void readSFrame(STATE *state, unsigned char A, unsigned char C){
         default:
             break;
     }
+}
+
+unsigned char readControl(){
+    STATE state = START;
+    STOP = FALSE;
+    unsigned char c = 0;
+    while(STOP == FALSE && alarmTriggered == FALSE){
+        if(read(fd, &byte, 1) > 0){
+            switch(state){
+                case START:
+                    if(byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if(byte == AR) state = A_RCV;
+                    else if(byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if(byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1){
+                        c = byte;
+                        state = C_RCV;
+                    }
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if(byte == (AR ^ c)) state = BCC1_RCV;
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case BCC1_RCV:
+                    if(byte == FLAG) STOP = TRUE;
+                    else state = START;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    return c;
 }
 
 void alarmHandler(int signal){
@@ -315,55 +373,6 @@ int llwrite(const unsigned char *buf, int bufSize){
     }
 }
 
-
-unsigned char readControl(){
-    STATE state = START;
-    STOP = FALSE;
-    unsigned char c = 0;
-    while(STOP == FALSE && alarmTriggered == FALSE){
-        if(read(fd, &byte, 1) > 0){
-            switch(state){
-                case START:
-                    if(byte == FLAG) state = FLAG_RCV;
-                    break;
-                case FLAG_RCV:
-                    if(byte == AR) state = A_RCV;
-                    else if(byte != FLAG) state = START;
-                    break;
-                case A_RCV:
-                    if(byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1){
-                        c = byte;
-                        state = C_RCV;
-                    }
-                    else if(byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case C_RCV:
-                    if(byte == (AR ^ c)) state = BCC1_RCV;
-                    else if(byte == FLAG) state = FLAG_RCV;
-                    else state = START;
-                    break;
-                case BCC1_RCV:
-                    if(byte == FLAG) STOP = TRUE;
-                    else state = START;
-                    break;
-                default:
-                    break;
-            }
-        }
-    }
-    return c;
-}
-
-////////////////////////////////////////////////
-// LLREAD
-////////////////////////////////////////////////
-int llread(unsigned char *packet){
-    // TODO
-
-    return 0;
-}
-
 ////////////////////////////////////////////////
 // LLCLOSE
 ////////////////////////////////////////////////
@@ -383,5 +392,96 @@ int llclose(int showStatistics){
     }
 
     close(fd);
+    return 0;
+}
+
+
+int handleIData(){
+    unsigned char return_byte = byte;
+
+    if(WAIT_BYTE){
+        if(byte == ESC_B2) return_byte = FLAG;
+        else return_byte = ESC_B1;
+        WAIT_BYTE = FALSE;
+    } 
+    else{
+        if(byte == ESC_B1) WAIT_BYTE = TRUE;
+    }
+
+    BCC_2 = BCC_2 ^ return_byte;
+    return return_byte;
+}
+
+
+
+int readCFrame(STATE *state, CTRL_STATE *ctrl_state){
+    // L2_RCV,
+    // L1_RCV,
+    // DATA_RCV,
+    // T_RCV,
+    // L_RCV,
+    // V_RCV
+    switch (*ctrl_state){
+        case C_RCV:
+            if(byte == CF_1){
+                *ctrl_state = L2_RCV;
+            }
+            else{
+                *ctrl_state = T_RCV;
+            }
+            break;
+        case L2_RCV:
+            data_size = byte * 256;
+            *ctrl_state = L1_RCV;
+            break;
+        case L1_RCV:
+            data_size += byte;
+            *ctrl_state = DATA_RCV;
+            break;
+        case DATA_RCV:
+            handleIData();
+            data_size--;
+            if(data_size == 0)
+                *state = BCC2_RCV;
+            break;
+        case T_RCV:
+            read_file_size = byte == SIZE;
+            *ctrl_state = L_RCV;
+            break;
+        case L_RCV:
+            if(read_file_size)
+        default:
+            break;
+    }
+}
+
+int readIFrame(STATE *state, CTRL_STATE *ctrl_state, unsigned char A, unsigned char C){
+    if(state == BCC2_RCV){
+        return BCC_2 == byte;
+    }
+    else if(state < 4){
+        readSFrame(&*state, A, C);
+    }
+    else{
+        readCFrame(&*state, &*ctrl_state);
+    }
+
+}
+
+////////////////////////////////////////////////
+// LLREAD
+////////////////////////////////////////////////
+int llread(unsigned char *packet){
+
+    unsigned char *c_frame = (unsigned char *) malloc(H_SIZE + C_SIZE);
+    STATE state = START;
+    CTRL_STATE ctrl_state = C_RCV;
+    BCC_2 = 0;
+
+    while(STOP == FALSE){
+        if (read(fd, &byte, 1) > 0){
+            readIFrame(&state, &ctrl_state, AT, SET);
+        }
+    }
     return 0;
 }

@@ -36,8 +36,7 @@ int trasmitterTasks(){
 }
 
 
-int receiverTasks(){
-    //llread();
+int receiverTasks(int fd){
     return 0;
 }
 
@@ -60,14 +59,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         exit(-1);
     }
 
-    // llwrite (controlo)
-    // while (llwrite [imagem])
-    // llwrite (controlo)
-
-
-    // llread (controlo)
-    // while (llread[imagem])
-    // llread(controlo)
+    if(connectionParams.role == LlTx){
+        printf("\n---- WRITE PROTOCOL ----\n");
+        llwrite(); // write
+    }
+    else{
+        printf("\n---- READ PROTOCOL ----\n");
+        receiverTasks(fd); // read
+    }
 
     // llclose
     printf("\n---- CLOSE PROTOCOL ----\n");
