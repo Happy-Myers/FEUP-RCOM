@@ -1,8 +1,17 @@
 #ifndef _UTILS_H_
 #define _UTILS_H_
 
-#define BUF_SIZE 256
+typedef enum {
+    START,
+    FLAG_RCV,
+    A_RCV,
+    C_RCV,
+    BCC1_RCV,
+    READING,
+    BYTE_STUFF
+} STATE;
 
+#define BUF_SIZE 256
 
 #define FLAG    0x7E    // Synchronisation: start or end of frame
 #define AT      0x03    // Address field in frames that are commands sent by the Transmitter or replies sent by the Receiver
@@ -34,6 +43,5 @@
 #define CF_1    1       // Control Field 1: Control Field value related to Data Frame
 #define CF_2    2       // Control Field 2: Control Field value related to Control Frame 1
 #define CF_3    3       // Control Field 3: Control Field value related to Control Frame 2
-
 
 #endif // _UTILS_H

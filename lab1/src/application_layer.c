@@ -31,12 +31,11 @@ LinkLayer buildConnectionParams(const char *serialPort, const char *role, int ba
 
 
 int trasmitterTasks(){
-    //llwrite()
     return 0;
 }
 
 
-int receiverTasks(int fd){
+int receiverTasks(){
     return 0;
 }
 
@@ -61,11 +60,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     if(connectionParams.role == LlTx){
         printf("\n---- WRITE PROTOCOL ----\n");
-        llwrite(); // write
+        trasmitterTasks(); // write
     }
     else{
         printf("\n---- READ PROTOCOL ----\n");
-        receiverTasks(fd); // read
+        receiverTasks(); // read
     }
 
     // llclose

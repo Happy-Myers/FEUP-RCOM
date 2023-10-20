@@ -15,28 +15,17 @@
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
-struct termios oldtio;
 LinkLayer connParams;
+
+struct termios oldtio;
 int fd;
+unsigned char byte;
 
 volatile int STOP = FALSE;
 int alarmTriggered = FALSE;
 
 int frameNumTx = 0;
 int frameNumRx = 1;
-
-unsigned char byte;
-
-
-typedef enum {
-    START,
-    FLAG_RCV,
-    A_RCV,
-    C_RCV,
-    BCC1_RCV,
-    READING,
-    BYTE_STUFF
-} STATE;
 
 
 int set_fd(LinkLayer conParam){
@@ -120,6 +109,46 @@ void readSFrame(STATE *state, unsigned char A, unsigned char C){
             break;
     }
 }
+
+unsigned char readCFrame(){
+    STATE state = START;
+    STOP = FALSE;
+    unsigned char c = 0;
+    while(STOP == FALSE && alarmTriggered == FALSE){
+        if(read(fd, &byte, 1) > 0){
+            switch(state){
+                case START:
+                    if(byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if(byte == AR) state = A_RCV;
+                    else if(byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if(byte == RR0 || byte == RR1 || byte == REJ0 || byte == REJ1){
+                        c = byte;
+                        state = C_RCV;
+                    }
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if(byte == (AR ^ c)) state = BCC1_RCV;
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case BCC1_RCV:
+                    if(byte == FLAG) STOP = TRUE;
+                    else state = START;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+    return c;
+}
+
 
 void alarmHandler(int signal){
     alarmTriggered = TRUE;
@@ -222,7 +251,6 @@ void closeConnection_Rx(STATE *state, int retransmissions, int timeout){
     }
 }
 
-
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
@@ -275,7 +303,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         currIndex++;
     }
 
-    int dataSize = frameSize - 6 - 3;
+    // int dataSize = frameSize - 6 - 3;
 
 
     frame[frameSize-2] = bcc2;
@@ -289,13 +317,14 @@ int llwrite(const unsigned char *buf, int bufSize){
     int rejected = FALSE;
     
 
+
     while(transmissionNum < retransmission){
         alarmTriggered = FALSE;
         alarm(connParams.timeout);
 
         while(alarmTriggered == FALSE && !rejected && !accepted){
             write(fd, frame, frameSize);
-            unsigned char response = readControl();
+            unsigned char response = readCFrame();
 
             if(response == 0)
                 continue;
@@ -345,7 +374,7 @@ int llread(unsigned char *packet){
                     else state = START;
                     break;
                 case C_RCV:
-                    if(byte == AT ^ c) state = READING;
+                    if(byte == (AT ^ c)) state = READING;
                     else if (byte == FLAG) state = FLAG_RCV;
                     else state = START;
                     break;
