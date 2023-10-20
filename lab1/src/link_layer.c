@@ -20,18 +20,12 @@ LinkLayer connParams;
 int fd;
 
 volatile int STOP = FALSE;
-volatile int WAIT_BYTE = FALSE;
-volatile int CONTROL_FRAME = TRUE;
 int alarmTriggered = FALSE;
 
 int frameNumTx = 0;
+int frameNumRx = 1;
 
 unsigned char byte;
-unsigned short data_size; 
-unsigned char BCC_2;
-unsigned char file_size;
-unsigned char *file_name;
-int read_file_size;
 
 
 typedef enum {
@@ -40,18 +34,9 @@ typedef enum {
     A_RCV,
     C_RCV,
     BCC1_RCV,
-    BCC2_RCV
+    READING,
+    BYTE_STUFF
 } STATE;
-
-typedef enum {
-    C_RCV,
-    L2_RCV,
-    L1_RCV,
-    DATA_RCV,
-    T_RCV,
-    L_RCV,
-    V_RCV
-} CTRL_STATE;
 
 
 int set_fd(LinkLayer conParam){
@@ -306,7 +291,6 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize){
     unsigned int frameSize = bufSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
-    int extraChars = 0;
 
     frame[0] = FLAG;
     frame[1] = AT;
@@ -323,14 +307,15 @@ int llwrite(const unsigned char *buf, int bufSize){
 
     int currIndex = 4;
 
-    for(int i = 0; i < bufSize; i++){
+    for(int i = 3; i < bufSize; i++){
         if(buf[i] == FLAG || buf[i] == ESC_B1){
             updateFrame(frame, &frameSize, &currIndex, buf[i]);
-            extraChars++;
-        }
-            
+        }           
         currIndex++;
     }
+
+    int dataSize = frameSize - 6 - 3;
+
 
     frame[frameSize-2] = bcc2;
     frame[frameSize-1] = FLAG;
@@ -348,7 +333,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         alarm(connParams.timeout);
 
         while(alarmTriggered == FALSE && !rejected && !accepted){
-            write(fd, frame, frameSize + extraChars);
+            write(fd, frame, frameSize);
             unsigned char response = readControl();
 
             if(response == 0)
@@ -367,10 +352,8 @@ int llwrite(const unsigned char *buf, int bufSize){
     free(frame);
     if(accepted == TRUE)
         return 0;
-    else{
-        llclose(0);
-        return -1;
-    }
+    
+    return -1;
 }
 
 ////////////////////////////////////////////////
@@ -395,79 +378,6 @@ int llclose(int showStatistics){
     return 0;
 }
 
-
-int handleIData(){
-    unsigned char return_byte = byte;
-
-    if(WAIT_BYTE){
-        if(byte == ESC_B2) return_byte = FLAG;
-        else return_byte = ESC_B1;
-        WAIT_BYTE = FALSE;
-    } 
-    else{
-        if(byte == ESC_B1) WAIT_BYTE = TRUE;
-    }
-
-    BCC_2 = BCC_2 ^ return_byte;
-    return return_byte;
-}
-
-
-
-int readCFrame(STATE *state, CTRL_STATE *ctrl_state){
-    // L2_RCV,
-    // L1_RCV,
-    // DATA_RCV,
-    // T_RCV,
-    // L_RCV,
-    // V_RCV
-    switch (*ctrl_state){
-        case C_RCV:
-            if(byte == CF_1){
-                *ctrl_state = L2_RCV;
-            }
-            else{
-                *ctrl_state = T_RCV;
-            }
-            break;
-        case L2_RCV:
-            data_size = byte * 256;
-            *ctrl_state = L1_RCV;
-            break;
-        case L1_RCV:
-            data_size += byte;
-            *ctrl_state = DATA_RCV;
-            break;
-        case DATA_RCV:
-            handleIData();
-            data_size--;
-            if(data_size == 0)
-                *state = BCC2_RCV;
-            break;
-        case T_RCV:
-            read_file_size = byte == SIZE;
-            *ctrl_state = L_RCV;
-            break;
-        case L_RCV:
-            if(read_file_size)
-        default:
-            break;
-    }
-}
-
-int readIFrame(STATE *state, CTRL_STATE *ctrl_state, unsigned char A, unsigned char C){
-    if(state == BCC2_RCV){
-        return BCC_2 == byte;
-    }
-    else if(state < 4){
-        readSFrame(&*state, A, C);
-    }
-    else{
-        readCFrame(&*state, &*ctrl_state);
-    }
-
-}
-
 ////////////////////////////////////////////////
 // LLREAD
 ////////////////////////////////////////////////
@@ -475,12 +385,61 @@ int llread(unsigned char *packet){
 
     unsigned char *c_frame = (unsigned char *) malloc(H_SIZE + C_SIZE);
     STATE state = START;
-    CTRL_STATE ctrl_state = C_RCV;
-    BCC_2 = 0;
+    int isControl = FALSE;
+    unsigned char c = 0;
+    int index = 0;
 
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
-            readIFrame(&state, &ctrl_state, AT, SET);
+            switch(state){
+                case START:
+                    if(byte == FLAG) state = FLAG_RCV;
+                    break;
+                case FLAG_RCV:
+                    if(byte == AT) state = A_RCV;
+                    else if(byte != FLAG) state = START;
+                    break;
+                case A_RCV:
+                    if(byte == CI_0 || byte == CI_1){
+                        state = C_RCV;    
+                        c = byte;
+                    }  
+                    else if(byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case C_RCV:
+                    if(byte == AT ^ c) state = READING;
+                    else if (byte == FLAG) state = FLAG_RCV;
+                    else state = START;
+                    break;
+                case READING:
+                    if(byte == ESC_B1){
+                        state = BYTE_STUFF;
+                        break;
+                    }
+                    if(byte == FLAG){
+                        index--;
+                        unsigned char bcc2 = packet[index];
+                        packet[index] = 0;
+                        unsigned char aux = 0;
+                        for(int i = 0; i < index; i++){
+                            aux ^= packet[i];
+                        }
+                        if(aux == bcc2){
+                            STOP = TRUE;
+                            sendSFrame(AR, frameNumRx == 1 ? RR1 : RR0);
+                            return index;
+                        }
+                    }
+                    break;
+                case BYTE_STUFF:
+                    if(byte == ESC_B2) packet[index++] = FLAG;
+                    else if(byte == ESC_B3) packet[index++] = ESC_B1;
+                    else sendSFrame(AR, frameNumRx == 1 ? REJ1 : REJ0);
+                    break;
+                default:
+                    break;
+            }
         }
     }
     return 0;
