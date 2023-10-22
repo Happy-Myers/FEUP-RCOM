@@ -364,10 +364,10 @@ int llread(unsigned char *packet){
                     else if(byte != FLAG) state = START;
                     break;
                 case A_RCV:
-                    if(byte == CI_0 || byte == CI_1){
-                        state = C_RCV;    
+                    if(byte == (frameNumTx == 0 ? CI_0 : CI_1)){
+                        state = C_RCV;
                         c = byte;
-                    }  
+                    }
                     else if(byte == FLAG) state = FLAG_RCV;
                     else state = START;
                     break;
@@ -389,6 +389,7 @@ int llread(unsigned char *packet){
                             STOP = TRUE;
                             sendSFrame(AR, frameNumRx == 1 ? RR1 : RR0);
                             frameNumRx = frameNumRx == 0 ? 1 : 0;
+                            frameNumTx = frameNumTx == 0 ? 1 : 0;
                             return index;
                         }
                         else{
