@@ -73,7 +73,7 @@ int receiverTasks(){
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
 
     unsigned char *buf;
-    FILE* newFile = fopen((char *) name, "awb+");
+    FILE* newFile = fopen((char *) name, "ab+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {    
         while ((packetSize = llread(packet)) <= 0);
@@ -98,7 +98,7 @@ int receiverTasks(){
     }
     free(name);
     free(nameEnd);
-    
+
     fclose(newFile);
     return packetSize;
 }
@@ -106,8 +106,7 @@ int receiverTasks(){
 
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename)
-{
+                      int nTries, int timeout, const char *filename){
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate, nTries, timeout);
     int fd;
 
