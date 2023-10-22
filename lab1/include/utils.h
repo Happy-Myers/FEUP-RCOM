@@ -40,8 +40,8 @@ typedef enum {
 #define D_SIZE  3       // Data Frame Size: Minimum number of additional Bytes in the Data Frame
 #define C_SIZE  5       // Control Frame Size: Minimum number of additional Bytes in the Control Frame
 
-#define CF_1    1       // Control Field 1: Control Field value related to Data Frame
-#define CF_2    2       // Control Field 2: Control Field value related to Control Frame 1
-#define CF_3    3       // Control Field 3: Control Field value related to Control Frame 2
+#define CTRL_DATA       1       // Control Field 1: Control Field value related to Data Frame
+#define CTRL_START      2       // Control Field 2: Control Field value related to Control Frame 1
+#define CTRL_END        3       // Control Field 3: Control Field value related to Control Frame 2
 
 #endif // _UTILS_H

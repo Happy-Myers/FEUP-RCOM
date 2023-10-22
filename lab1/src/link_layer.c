@@ -149,7 +149,6 @@ unsigned char readCFrame(){
     return c;
 }
 
-
 void alarmHandler(int signal){
     alarmTriggered = TRUE;
 }
@@ -158,12 +157,12 @@ int testConnection_Tx(STATE *state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
     while(retry != 0 && STOP == FALSE){
-        printf("Sending SET command\n");
+        printf("   -Sending SET command\n");
         sendSFrame(AT, SET);
         alarm(timeout);
         alarmTriggered = FALSE;
 
-        printf("Receiving UA command\n");
+        printf("   -Receiving UA command\n");
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
                 readSFrame(&*state, AR, UA);
@@ -175,14 +174,14 @@ int testConnection_Tx(STATE *state, int retransmissions, int timeout){
 }
 
 int testConnection_Rx(STATE *state){
-    printf("Receiving SET command\n");
+    printf("   -Receiving SET command\n");
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
             readSFrame(&*state, AT, SET);
         }
     }
 
-    printf("Sending UA command\n");
+    printf("   -Sending UA command\n");
     return sendSFrame(AR, UA);
 }
 
@@ -210,12 +209,12 @@ void closeConnection_Tx(STATE *state, int retransmissions, int timeout){
     int retry = retransmissions;
 
     while(retry != 0 && STOP == FALSE){
-        printf("Sending DISC command\n");
+        printf("   -Sending DISC command\n");
         sendSFrame(AT, DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
 
-        printf("Receiving DISC command\n");
+        printf("   -Receiving DISC command\n");
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
                 readSFrame(&*state, AR, DISC);
@@ -224,7 +223,7 @@ void closeConnection_Tx(STATE *state, int retransmissions, int timeout){
         retry--;
     }
 
-    printf("Sending UA command\n");
+    printf("   -Sending UA command\n");
     sendSFrame(AT, UA);
 }
 
@@ -232,16 +231,16 @@ void closeConnection_Rx(STATE *state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
 
-    printf("Receiving DISC command\n");
+    printf("   -Receiving DISC command\n");
     readSFrame(&*state, AT, DISC);
 
     while(retry != 0 && STOP == FALSE){
-        printf("Sending DISC command\n");
+        printf("   -Sending DISC command\n");
         sendSFrame(AR, DISC);
         alarm(timeout);
         alarmTriggered = FALSE;
 
-        printf("Receiving UA command\n");
+        printf("   -Receiving UA command\n");
         while(alarmTriggered == FALSE && STOP == FALSE){
             if(read(fd, &byte, 1) > 0){
                 readSFrame(&*state, AT, UA);
@@ -254,8 +253,7 @@ void closeConnection_Rx(STATE *state, int retransmissions, int timeout){
 ////////////////////////////////////////////////
 // LLOPEN
 ////////////////////////////////////////////////
-int llopen(LinkLayer connectionParameters)
-{
+int llopen(LinkLayer connectionParameters){
     connParams = connectionParameters;
     STATE state = START;    
     set_fd(connParams);
@@ -379,36 +377,45 @@ int llread(unsigned char *packet){
                     else state = START;
                     break;
                 case READING:
-                    if(byte == ESC_B1){
-                        state = BYTE_STUFF;
-                        break;
-                    }
-                    if(byte == FLAG){
+                    if(byte == ESC_B1) state = BYTE_STUFF;
+                    else if(byte == FLAG){
                         index--;
                         unsigned char bcc2 = packet[index];
                         packet[index] = 0;
-                        unsigned char aux = 0;
+                        unsigned char aux = 0;  // neutral element of the XOR operation
                         for(int i = 0; i < index; i++){
                             aux ^= packet[i];
                         }
                         if(aux == bcc2){
                             STOP = TRUE;
                             sendSFrame(AR, frameNumRx == 1 ? RR1 : RR0);
+                            frameNumRx = frameNumRx == 0 ? 1 : 0;
                             return index;
                         }
+                        else{
+                            printf("[Erro - Pacote Rejeitado]\n");
+                            sendSFrame(AR, (frameNumRx == 0 ? REJ0 : REJ1));
+                            return -1;
+                        }
                     }
+                    else packet[index++] = byte;
                     break;
                 case BYTE_STUFF:
+                    state = READING;
                     if(byte == ESC_B2) packet[index++] = FLAG;
                     else if(byte == ESC_B3) packet[index++] = ESC_B1;
-                    else sendSFrame(AR, frameNumRx == 1 ? REJ1 : REJ0);
+                    else{
+                        printf("[Erro - Pacote Rejeitado - BYTE STUFF ERROR]\n");
+                        sendSFrame(AR, (frameNumRx == 0 ? REJ0 : REJ1));
+                        return -1;
+                    }
                     break;
                 default:
                     break;
             }
         }
     }
-    return 0;
+    return -1;
 }
 
 
