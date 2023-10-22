@@ -379,8 +379,7 @@ int llread(unsigned char *packet){
                 case READING:
                     if(byte == ESC_B1) state = BYTE_STUFF;
                     else if(byte == FLAG){
-                        index--;
-                        unsigned char bcc2 = packet[index];
+                        unsigned char bcc2 = packet[--index];
                         packet[index] = 0;
                         unsigned char aux = 0;  // neutral element of the XOR operation
                         for(int i = 0; i < index; i++){

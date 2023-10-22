@@ -68,11 +68,12 @@ int receiverTasks(){
     }
 
     unsigned long int fileSize = 0, fileSizeEnd = 0;
-    unsigned char *name = (unsigned char*) "", nameEnd = (unsigned char*) "";
+    unsigned char *name = (unsigned char*) malloc(MAX_PAYLOAD_SIZE);
+    unsigned char *nameEnd = (unsigned char*) malloc(MAX_PAYLOAD_SIZE);
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
 
     unsigned char *buf;
-    FILE* newFile = fopen((char *) name, "wb+");
+    FILE* newFile = fopen((char *) name, "awb+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {    
         while ((packetSize = llread(packet)) <= 0);
@@ -95,7 +96,9 @@ int receiverTasks(){
             packetSize = -1;
         }
     }
-
+    free(name);
+    free(nameEnd);
+    
     fclose(newFile);
     return packetSize;
 }
