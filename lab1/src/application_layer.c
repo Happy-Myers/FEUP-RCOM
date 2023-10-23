@@ -100,6 +100,7 @@ int trasmitterTasks(const char *filename){
         data[1] = L2;
         data[2] = L1;
         memcpy(data+3, fileContent, dataSize);
+        printf("SENDING DATA PACKET\n");
         if(llwrite(data, dataSize+3) == -1){
             printf("error in data packet \n");
             return -1;
@@ -119,12 +120,13 @@ int trasmitterTasks(const char *filename){
 }
 
 int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, unsigned char **name){
-    unsigned char dataLengthB = 0, fileSizeAux[MAX_PAYLOAD_SIZE];
+    unsigned char dataLengthB = 0, *fileSizeAux = NULL;
 
     for(int i = 1; i < size; i+= dataLengthB + 1){
         switch(packet[i]){
             case 0: // File Size
                 dataLengthB = packet[++i];
+                fileSizeAux = (unsigned char*)malloc(dataLengthB);
                 memcpy(fileSizeAux, packet+i+1, dataLengthB);
                 for(unsigned int j = 0; j < dataLengthB; j++)
                     *fileSize = (*fileSize << 8) + fileSizeAux[j];
@@ -133,11 +135,18 @@ int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, u
                 dataLengthB = packet[++i];
                 *name = (unsigned char*) malloc (dataLengthB);
                 memcpy(*name, packet+i+1, dataLengthB);
+
+                // Append "-received" to the name
+                memcpy(*name + dataLengthB, "-received", 9);  // Length of "-received" is 9
+                (*name)[dataLengthB + 9] = '\0';  // Null-terminate the string
                 break;
             default:
                 return -1;
         }
     }
+
+    if (fileSizeAux != NULL) free(fileSizeAux);
+
     return 0;
 }
 
@@ -155,13 +164,15 @@ int receiverTasks(){
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
 
     unsigned char *buf;
-    FILE* newFile = fopen((char *) name, "ab+");
+    FILE* newFile = fopen("penguin-received.gif", "ab+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {
         while ((packetSize = llread(packet)) < 0);
         if(packet[0] == CTRL_DATA){
+            printf("Packet Size : %d\n", packetSize);
             printf("    -Receiving Data\n");
             packetSize = (packet[1] << 8) + packet[2];
+            printf("Packet Size : %d\n", packetSize);
             buf = (unsigned char*) malloc (packetSize);
             memcpy(buf, packet + 3, packetSize);
             fwrite(buf, sizeof(unsigned char), packetSize, newFile);
