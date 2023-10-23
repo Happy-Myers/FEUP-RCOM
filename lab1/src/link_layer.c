@@ -12,6 +12,7 @@
 #include "link_layer.h"
 #include "utils.h"
 
+
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
@@ -185,25 +186,6 @@ int testConnection_Rx(STATE *state){
     return sendSFrame(AR, UA);
 }
 
-void updateFrame(unsigned char *frame, unsigned int *frameSize, int *currIndex, unsigned char flag){
-    frame = (unsigned char *)realloc(frame, *++frameSize);
-    for(int i = *currIndex; i < *frameSize; i++){
-        frame[i+1] = frame[i];
-    }
-
-    switch(flag){
-        case FLAG:
-            frame[*currIndex++] = ESC_B1;
-            frame[*currIndex] = ESC_B2;
-            break;
-        case ESC_B1:
-            frame[*++currIndex] = ESC_B3;
-            break;
-        default: 
-            break;
-    }
-}
-
 void closeConnection_Tx(STATE *state, int retransmissions, int timeout){
     (void) signal(SIGALRM, alarmHandler);
     int retry = retransmissions;
@@ -276,33 +258,42 @@ int llopen(LinkLayer connectionParameters){
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize){
-    unsigned int frameSize = bufSize + 6; // buf contains data 
+    unsigned char C = frameNumTx == 0 ? CI_0 : CI_1;
+    unsigned char bcc1 = AT ^ C; //BCC1
+    
+    unsigned char bcc2 = 0;
+    int newBuffSize = 0;
+
+    for(int i = 0; i < bufSize; i++){
+        bcc2 = bcc2 ^ buf[i];
+        if(buf[i] == FLAG || buf[i] == ESC_B1)
+            newBuffSize += 2;
+        else 
+            newBuffSize++;
+    }
+    unsigned int frameSize = newBuffSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
 
     frame[0] = FLAG;
     frame[1] = AT;
-    frame[2] = frameNumTx == 0 ? CI_0 : CI_1;
-    frame[3] = frame[1] ^ frame[2]; //BCC1
+    frame[2] = C;
+    frame[3] = bcc1;
 
-    memcpy(frame+4, buf, bufSize);
-
-    unsigned char bcc2 = 0;
+    int pos = 4;
 
     for(int i = 0; i < bufSize; i++){
-        bcc2 = bcc2 ^ buf[i];
+        if(buf[i] == FLAG){
+            frame[pos++] = ESC_B1;
+            frame[pos] = ESC_B2;
+        }
+        else if(buf[i] == ESC_B1){
+            frame[++pos] = ESC_B3;
+        }
+        else{
+            frame[pos] = buf[i];
+        }
+        pos++;
     }
-
-    int currIndex = 4;
-
-    for(int i = 3; i < bufSize; i++){
-        if(buf[i] == FLAG || buf[i] == ESC_B1){
-            updateFrame(frame, &frameSize, &currIndex, buf[i]);
-        }           
-        currIndex++;
-    }
-
-    // int dataSize = frameSize - 6 - 3;
-
 
     frame[frameSize-2] = bcc2;
     frame[frameSize-1] = FLAG;
@@ -314,8 +305,6 @@ int llwrite(const unsigned char *buf, int bufSize){
     int accepted = FALSE;
     int rejected = FALSE;
     
-
-
     while(transmissionNum < retransmission){
         alarmTriggered = FALSE;
         alarm(connParams.timeout);
@@ -348,10 +337,10 @@ int llwrite(const unsigned char *buf, int bufSize){
 // LLREAD
 ////////////////////////////////////////////////
 int llread(unsigned char *packet){
-
     STATE state = START;
     unsigned char c = 0;
     int index = 0;
+    STOP = FALSE;
 
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){

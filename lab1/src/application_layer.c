@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <math.h>
 #include "link_layer.h"
 #include "utils.h"
 #include "application_layer.h"
@@ -30,8 +31,90 @@ LinkLayer buildConnectionParams(const char *serialPort, const char *role, int ba
     return connectionParams;
 }
 
+unsigned char * constructControlPacket(int type, const char* filename, unsigned long V1, unsigned long *packetSize){
+    int L1 = ceil(log2(V1)/8);
+    int L2 = strlen(filename);
 
-int trasmitterTasks(){
+    *packetSize = 1 + 2 + L1 + 2 + L2;
+
+    unsigned char* controlPacket = (unsigned char *)malloc(*packetSize);
+    int index = 0;
+
+    controlPacket[index++] = 2;
+    controlPacket[index++] = 0;
+    controlPacket[index++] = L1;
+
+    for(unsigned char i = 0; i < L1; i++){
+        controlPacket[L1 - i + 2] = V1 & 0xFF;
+        V1 >>= 8;
+        index++;
+    }
+
+    controlPacket[index++] = 1;
+    controlPacket[index++] = L2;
+    memcpy(controlPacket + index, filename, L2);
+
+    return controlPacket;
+}
+
+
+int trasmitterTasks(const char *filename){
+    FILE* penguin = fopen(filename, "rb");
+    if(penguin == NULL){
+        printf("file not found\n");
+        return -1;
+    }
+
+    //construct control packet
+
+    int fPos = ftell(penguin);
+
+    fseek(penguin, 0, SEEK_END);
+    int fileSize = ftell(penguin) - fPos;
+    fseek(penguin, fPos, SEEK_SET);
+    unsigned long cPacketSize;
+
+    unsigned char* cPacket = constructControlPacket(2, filename, fileSize, &cPacketSize);
+
+    if(llwrite(cPacket, cPacketSize) == -1){
+        printf("error in control packet 1\n");
+        return -1;
+    }
+
+    free(cPacket);
+
+    unsigned char *fileContent = (unsigned char*) malloc(sizeof(unsigned char) * fileSize);
+    fread(fileContent, sizeof(unsigned char), fileSize, penguin);
+
+    int totalSent = 0;
+
+    //send data packets
+
+    while(totalSent < fileSize){
+        int remainingBytes = fileSize - totalSent;
+        int dataSize = remainingBytes> (MAX_PAYLOAD_SIZE-3) ? (MAX_PAYLOAD_SIZE-3) : remainingBytes;
+        int L1 = dataSize & 0xFF;
+        int L2 = (dataSize >> 8) & 0xFF;
+        unsigned char *data = (unsigned char*) malloc(dataSize+3);
+        data[0] = 1;
+        data[1] = L2;
+        data[2] = L1;
+        memcpy(data+3, fileContent, dataSize);
+        if(llwrite(data, dataSize+3) == -1){
+            printf("error in data packet \n");
+            return -1;
+        }
+        totalSent += dataSize;
+        fileContent += dataSize;
+        free(data);
+    }
+
+    unsigned char *cPacketEnd = constructControlPacket(3, filename, fileSize, &cPacketSize);
+    if(llwrite(cPacketEnd, cPacketSize) == -1){
+        printf("error in control packet 2\n");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -116,7 +199,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     else{
         if(connectionParams.role == LlTx){
             printf("\n---- WRITE PROTOCOL ----\n");
-            if(trasmitterTasks() < 0) printf("[ERROR WHILE WRITING - CLOSING]");
+            if(trasmitterTasks(filename) < 0) printf("[ERROR WHILE WRITING - CLOSING]");
         }
         else{
             printf("\n---- READ PROTOCOL ----\n");
