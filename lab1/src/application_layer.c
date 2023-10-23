@@ -75,8 +75,8 @@ int receiverTasks(){
     unsigned char *buf;
     FILE* newFile = fopen((char *) name, "ab+");
 
-    while (packetSize > 0 && packet[0] != CTRL_END) {    
-        while ((packetSize = llread(packet)) <= 0);
+    while (packetSize > 0 && packet[0] != CTRL_END) {
+        while ((packetSize = llread(packet)) < 0);
         if(packet[0] == CTRL_DATA){
             printf("    -Receiving Data\n");
             packetSize = (packet[1] << 8) + packet[2];
@@ -89,7 +89,7 @@ int receiverTasks(){
             printf("  -Receiving Control Field [END]\n");
             parseCPacket(packet, packetSize, &fileSizeEnd, &nameEnd);
             if(strcmp((char *)name, (char *)nameEnd) != 0 && fileSize != fileSizeEnd)
-                printf("[ERROR - START AND END CONTROL FRAMES DO NOT MATCH]\n"); 
+                printf("[ERROR - START AND END CONTROL FRAMES DO NOT MATCH]\n");
         }
         else{
             printf("[ERROR - DATA PACKET DOESNT MATCH]\n");
@@ -112,7 +112,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
     printf("\n---- OPEN PROTOCOL ----\n");
     if((fd = llopen(connectionParams)) < 0) printf("erro no llopen()\n");
-    
+
     else{
         if(connectionParams.role == LlTx){
             printf("\n---- WRITE PROTOCOL ----\n");

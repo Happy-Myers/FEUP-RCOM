@@ -369,6 +369,7 @@ int llread(unsigned char *packet){
                         c = byte;
                     }
                     else if(byte == FLAG) state = FLAG_RCV;
+                    else if(byte == DISC) return 0;
                     else state = START;
                     break;
                 case C_RCV:
