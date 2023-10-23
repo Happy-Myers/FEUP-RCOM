@@ -3,7 +3,8 @@
 
 # Parameters
 CC = gcc
-CFLAGS = -Wall -lm
+CFLAGS = -Wall
+LM = -lm
 
 SRC = src/
 INCLUDE = include/
@@ -21,10 +22,10 @@ RX_FILE = penguin-received.gif
 all: $(BIN)/main $(BIN)/cable
 
 $(BIN)/main: main.c $(SRC)/*.c
-	$(CC) $(CFLAGS) -o $@ $^ -I$(INCLUDE)
+	$(CC) $(CFLAGS) -o $@ $^ -I$(INCLUDE) $(LM)
 
 $(BIN)/cable: $(CABLE_DIR)/cable.c
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LM)
 
 .PHONY: run_tx
 run_tx: $(BIN)/main
