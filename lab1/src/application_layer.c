@@ -40,7 +40,7 @@ unsigned char * constructControlPacket(int type, const char* filename, unsigned 
     unsigned char* controlPacket = (unsigned char *)malloc(*packetSize);
     int index = 0;
 
-    controlPacket[index++] = 2;
+    controlPacket[index++] = type;
     controlPacket[index++] = 0;
     controlPacket[index++] = L1;
 
@@ -77,7 +77,7 @@ int trasmitterTasks(const char *filename){
     unsigned char* cPacket = constructControlPacket(2, filename, fileSize, &cPacketSize);
 
     if(llwrite(cPacket, cPacketSize) == -1){
-        printf("error in control packet 1\n");
+        printf("[ERROR - Couldnt Send Control Packet START] \n");
         return -1;
     }
 
@@ -100,9 +100,8 @@ int trasmitterTasks(const char *filename){
         data[1] = L2;
         data[2] = L1;
         memcpy(data+3, fileContent, dataSize);
-        printf("SENDING DATA PACKET\n");
         if(llwrite(data, dataSize+3) == -1){
-            printf("error in data packet \n");
+            printf("[ERROR - Couldnt Send Data Packet]\n");
             return -1;
         }
         totalSent += dataSize;
@@ -112,7 +111,7 @@ int trasmitterTasks(const char *filename){
 
     unsigned char *cPacketEnd = constructControlPacket(3, filename, fileSize, &cPacketSize);
     if(llwrite(cPacketEnd, cPacketSize) == -1){
-        printf("error in control packet 2\n");
+        printf("[ERROR - Couldnt Send Control Packet END] \n");
         return -1;
     }
 
@@ -135,17 +134,11 @@ int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, u
                 dataLengthB = packet[++i];
                 *name = (unsigned char*) malloc (dataLengthB);
                 memcpy(*name, packet+i+1, dataLengthB);
-
-                // Append "-received" to the name
-                memcpy(*name + dataLengthB, "-received", 9);  // Length of "-received" is 9
-                (*name)[dataLengthB + 9] = '\0';  // Null-terminate the string
                 break;
             default:
                 return -1;
         }
     }
-
-    if (fileSizeAux != NULL) free(fileSizeAux);
 
     return 0;
 }
@@ -154,43 +147,42 @@ int receiverTasks(){
     unsigned char *packet = (unsigned char *) malloc (MAX_PAYLOAD_SIZE);
     int packetSize = -1;
 
-    while((packetSize = llread(packet)) <= 0){
-        if(packet[0] != CTRL_START) packetSize = 0;
+    while(packetSize < 0){
+        packetSize = llread(packet);
+        if(packet[0] != CTRL_START) packetSize = -1;
         else printf("  -Receiving Control Field [START]\n");
     }
 
     unsigned long int fileSize = 0, fileSizeEnd = 0;
-    unsigned char *name, *nameEnd;
+    unsigned char *name = NULL, *nameEnd = NULL;
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
 
     unsigned char *buf;
+    printf("NAME: %s\n", name);
     FILE* newFile = fopen("penguin-received.gif", "ab+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {
+
         while ((packetSize = llread(packet)) < 0);
         if(packet[0] == CTRL_DATA){
-            printf("Packet Size : %d\n", packetSize);
             printf("    -Receiving Data\n");
             packetSize = (packet[1] << 8) + packet[2];
-            printf("Packet Size : %d\n", packetSize);
             buf = (unsigned char*) malloc (packetSize);
             memcpy(buf, packet + 3, packetSize);
             fwrite(buf, sizeof(unsigned char), packetSize, newFile);
             free(buf);
-        }
-        else if(packet[0] == CTRL_END){
+
+        } else if(packet[0] == CTRL_END){
             printf("  -Receiving Control Field [END]\n");
-            parseCPacket(packet, packetSize, &fileSizeEnd, &nameEnd);
-            if(strcmp((char *)name, (char *)nameEnd) != 0 && fileSize != fileSizeEnd)
+            if(parseCPacket(packet, packetSize, &fileSizeEnd, &nameEnd) < 0) return -1;
+            if(fileSize != fileSizeEnd)
                 printf("[ERROR - START AND END CONTROL FRAMES DO NOT MATCH]\n");
-        }
-        else{
+
+        } else{
             printf("[ERROR - DATA PACKET DOESNT MATCH]\n");
-            packetSize = -1;
+            return -1;
         }
     }
-    free(name);
-    free(nameEnd);
 
     fclose(newFile);
     return packetSize;
@@ -204,23 +196,23 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     int fd;
 
     printf("\n---- OPEN PROTOCOL ----\n");
-    if((fd = llopen(connectionParams)) < 0) printf("erro no llopen()\n");
+    if((fd = llopen(connectionParams)) < 0) printf("[ERROR - llopen()]\n");
 
     else{
         if(connectionParams.role == LlTx){
             printf("\n---- WRITE PROTOCOL ----\n");
-            if(trasmitterTasks(filename) < 0) printf("[ERROR WHILE WRITING - CLOSING]");
+            if(trasmitterTasks(filename) < 0) printf("[ERROR WHILE WRITING - CLOSING]\n");
         }
         else{
             printf("\n---- READ PROTOCOL ----\n");
-            if(receiverTasks() < 0) printf("[ERROR WHILE READING - CLOSING]");
+            if(receiverTasks() < 0) printf("[ERROR WHILE READING - CLOSING]\n");
         }
     }
 
     // llclose
     printf("\n---- CLOSE PROTOCOL ----\n");
     if(llclose(fd) < 0){
-        printf("erro no llclose()\n");
+        printf("[ERROR - llclose()]\n");
         exit(-1);
     }
 }

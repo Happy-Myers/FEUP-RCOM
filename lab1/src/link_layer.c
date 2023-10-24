@@ -284,34 +284,42 @@ int llwrite(const unsigned char *buf, int bufSize){
     for(int i = 0; i < bufSize; i++){
         if(buf[i] == FLAG){
             frame[pos++] = ESC_B1;
-            frame[pos] = ESC_B2;
+            frame[pos++] = ESC_B2;
         }
         else if(buf[i] == ESC_B1){
-            frame[++pos] = ESC_B3;
+            frame[pos++] = ESC_B1;
+            frame[pos++] = ESC_B3;
         }
         else{
-            frame[pos] = buf[i];
+            frame[pos++] = buf[i];
         }
-        pos++;
     }
-
-    frame[frameSize-2] = bcc2;
+ 
+    if(bcc2 == FLAG){
+        frame[frameSize-3] = ESC_B1;
+        frame[frameSize-2] = ESC_B2;
+    }
+    else if(bcc2 == ESC_B1){
+        frame[frameSize-3] = ESC_B1;
+        frame[frameSize-2] = ESC_B3;
+    }
+    else{
+        frame[frameSize-2] = bcc2;
+    }
     frame[frameSize-1] = FLAG;
 
     // verify if transmission was successful
-
     int transmissionNum = 0;
     int retransmission = connParams.nRetransmissions;
     int accepted = FALSE;
     int rejected = FALSE;
-    // for(int i=0; i< frameSize; i++){
-    //     printf("var = 0x%02X\n", frame[i]);
-    // }
+
     while(transmissionNum < retransmission){
         alarmTriggered = FALSE;
         alarm(connParams.timeout);
 
         while(alarmTriggered == FALSE && !rejected && !accepted){
+            printf("    -Sending Data\n");
             write(fd, frame, frameSize);
             unsigned char response = readCFrame();
 
@@ -347,7 +355,6 @@ int llread(unsigned char *packet){
 
     while(STOP == FALSE){
         if (read(fd, &byte, 1) > 0){
-            // printf("var = 0x%02X\n", byte);
             switch(state){
                 case START:
                     if(byte == FLAG) state = FLAG_RCV;
@@ -382,7 +389,7 @@ int llread(unsigned char *packet){
                             return index;
                         }
                         else{
-                            printf("[Erro - Pacote Rejeitado]\n");
+                            printf("[Error - Rejected Package]\n");
                             sendSFrame(AR, (frameNumRx == 0 ? REJ0 : REJ1));
                             return -1;
                         }
@@ -390,28 +397,26 @@ int llread(unsigned char *packet){
                     else{
                         packet[index++] = byte;
                         aux ^= byte;
-                    } 
+                    }
                     break;
                 case BYTE_STUFF:
                     state = READING;
                     if(byte == ESC_B2){
                         packet[index++] = FLAG;
-                        aux ^= FLAG;
                     }
                     else if(byte == ESC_B3){
                         packet[index++] = ESC_B1;
-                        aux ^= ESC_B1;
                     }
                     else{
-                        printf("[Erro - Pacote Rejeitado - BYTE STUFF ERROR]\n");
+                        printf("[Error - Rejected Package - BYTE STUFF ERROR]\n");
                         sendSFrame(AR, (frameNumRx == 0 ? REJ0 : REJ1));
                         return -1;
                     }
+                    aux ^= packet[index-1];
                     break;
                 default:
                     break;
             }
-            // printf("var = 0x%02X\n",aux);
         }
     }
     return -1;
