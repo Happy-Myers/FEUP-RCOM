@@ -272,6 +272,7 @@ int llwrite(const unsigned char *buf, int bufSize){
         else 
             newBuffSize++;
     }
+    if(bcc2 == FLAG || bcc2 == ESC_B1) newBuffSize++;
     unsigned int frameSize = newBuffSize + 6; // buf contains data 
     unsigned char *frame = (unsigned char *) malloc(frameSize);
 

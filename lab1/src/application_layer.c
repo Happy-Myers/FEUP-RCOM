@@ -92,7 +92,7 @@ int trasmitterTasks(const char *filename){
 
     while(totalSent < fileSize){
         int remainingBytes = fileSize - totalSent;
-        int dataSize = remainingBytes> (MAX_PAYLOAD_SIZE-3) ? (MAX_PAYLOAD_SIZE-3) : remainingBytes;
+        int dataSize = remainingBytes> (MAX_PAYLOAD_SIZE/200-3) ? (MAX_PAYLOAD_SIZE/200-3) : remainingBytes;
         int L1 = dataSize & 0xFF;
         int L2 = (dataSize >> 8) & 0xFF;
         unsigned char *data = (unsigned char*) malloc(dataSize+3);
