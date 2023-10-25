@@ -161,7 +161,6 @@ int receiverTasks(){
     unsigned long int fileSize = 0, fileSizeEnd = 0;
     unsigned char *name = NULL, *nameEnd = NULL;
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
-    stats.fileSize = fileSize;
     unsigned char *buf;
     FILE* newFile = fopen("penguin-received.gif", "ab+");
 
