@@ -258,6 +258,7 @@ int llopen(LinkLayer connectionParameters){
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize){
+    (void) signal(SIGALRM, alarmHandler);
     unsigned char C = frameNumTx == 0 ? CI_0 : CI_1;
     unsigned char bcc1 = AT ^ C; //BCC1
     
@@ -309,37 +310,30 @@ int llwrite(const unsigned char *buf, int bufSize){
     frame[frameSize-1] = FLAG;
 
     // verify if transmission was successful
-    int transmissionNum = 0;
     int retransmission = connParams.nRetransmissions;
     int accepted = FALSE;
-    int rejected = FALSE;
 
-    while(transmissionNum < retransmission){
-        alarmTriggered = FALSE;
+    while(retransmission > 0 && !accepted){
         alarm(connParams.timeout);
+        alarmTriggered = FALSE;
 
-        while(alarmTriggered == FALSE && !rejected && !accepted){
+        while(alarmTriggered == FALSE && !accepted){
             printf("    -Sending Data\n");
             write(fd, frame, frameSize);
             unsigned char response = readCFrame();
 
-            if(response == 0)
-                continue;
-            else if(response == RR0 || response == RR1){
+            if(response == RR0 || response == RR1){
                 accepted = TRUE;
                 frameNumTx = (frameNumTx + 1) % 2;
             }
-            else if(response == REJ0 || response == REJ1)
-                rejected = TRUE;
-            else continue;
         }
-        if(accepted == TRUE) break;
-        transmissionNum++;
+        retransmission--;
     }
+
     free(frame);
     if(accepted == TRUE)
         return 0;
-    
+
     return -1;
 }
 
@@ -428,8 +422,8 @@ int llread(unsigned char *packet){
 ////////////////////////////////////////////////
 int llclose(int showStatistics){
     STATE state = START;
-
     STOP = FALSE;
+
     if(connParams.role == LlTx)
         closeConnection_Tx(&state, connParams.nRetransmissions, connParams.timeout);
     else

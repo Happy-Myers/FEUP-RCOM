@@ -123,6 +123,7 @@ int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, u
 
     for(int i = 1; i < size; i+= dataLengthB + 1){
         switch(packet[i]){
+
             case 0: // File Size
                 dataLengthB = packet[++i];
                 fileSizeAux = (unsigned char*)malloc(dataLengthB);
@@ -130,11 +131,13 @@ int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, u
                 for(unsigned int j = 0; j < dataLengthB; j++)
                     *fileSize = (*fileSize << 8) + fileSizeAux[j];
                 break;
+
             case 1: // File Name
                 dataLengthB = packet[++i];
                 *name = (unsigned char*) malloc (dataLengthB);
                 memcpy(*name, packet+i+1, dataLengthB);
                 break;
+
             default:
                 return -1;
         }
@@ -147,23 +150,28 @@ int receiverTasks(){
     unsigned char *packet = (unsigned char *) malloc (MAX_PAYLOAD_SIZE);
     int packetSize = -1;
 
-    while(packetSize < 0){
+    int tries = 3;
+    while(packetSize < 0 && tries > 0){
         packetSize = llread(packet);
         if(packet[0] != CTRL_START) packetSize = -1;
         else printf("  -Receiving Control Field [START]\n");
+        tries --;
     }
 
     unsigned long int fileSize = 0, fileSizeEnd = 0;
     unsigned char *name = NULL, *nameEnd = NULL;
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
-
+    stats.fileSize = fileSize;
     unsigned char *buf;
-    printf("NAME: %s\n", name);
     FILE* newFile = fopen("penguin-received.gif", "ab+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {
 
         while ((packetSize = llread(packet)) < 0);
+        if(packetSize == 0){
+            packetSize = -1;
+            break;
+        }
         if(packet[0] == CTRL_DATA){
             printf("    -Receiving Data\n");
             packetSize = (packet[1] << 8) + packet[2];
@@ -189,14 +197,17 @@ int receiverTasks(){
 }
 
 
-
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename){
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate, nTries, timeout);
+
     int fd;
 
     printf("\n---- OPEN PROTOCOL ----\n");
-    if((fd = llopen(connectionParams)) < 0) printf("[ERROR - llopen()]\n");
+    if((fd = llopen(connectionParams)) < 0){
+        printf("[ERROR - llopen()]\n");
+        exit(-1);
+    }
 
     else{
         if(connectionParams.role == LlTx){
@@ -215,4 +226,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         printf("[ERROR - llclose()]\n");
         exit(-1);
     }
+
 }
