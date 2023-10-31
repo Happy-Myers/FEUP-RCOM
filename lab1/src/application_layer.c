@@ -65,10 +65,7 @@ int trasmitterTasks(const char *filename){
         return -1;
     }
 
-    //construct control packet
-
     int fPos = ftell(penguin);
-
     fseek(penguin, 0, SEEK_END);
     int fileSize = ftell(penguin) - fPos;
     fseek(penguin, fPos, SEEK_SET);
@@ -89,7 +86,6 @@ int trasmitterTasks(const char *filename){
     int totalSent = 0;
 
     //send data packets
-
     while(totalSent < fileSize){
         int remainingBytes = fileSize - totalSent;
         int dataSize = remainingBytes> (MAX_PAYLOAD_SIZE-3) ? (MAX_PAYLOAD_SIZE-3) : remainingBytes;
@@ -146,7 +142,7 @@ int parseCPacket(unsigned char* packet, int size, unsigned long int *fileSize, u
     return 0;
 }
 
-int receiverTasks(){
+int receiverTasks(const char *filename){
     unsigned char *packet = (unsigned char *) malloc (MAX_PAYLOAD_SIZE);
     int packetSize = -1;
 
@@ -162,7 +158,7 @@ int receiverTasks(){
     unsigned char *name = NULL, *nameEnd = NULL;
     if(parseCPacket(packet, packetSize, &fileSize, &name) < 0) return -1;
     unsigned char *buf;
-    FILE* newFile = fopen("penguin-received.gif", "ab+");
+    FILE* newFile = fopen(filename, "wb+");
 
     while (packetSize > 0 && packet[0] != CTRL_END) {
 
@@ -182,6 +178,7 @@ int receiverTasks(){
         } else if(packet[0] == CTRL_END){
             printf("  -Receiving Control Field [END]\n");
             if(parseCPacket(packet, packetSize, &fileSizeEnd, &nameEnd) < 0) return -1;
+            
             if(fileSize != fileSizeEnd)
                 printf("[ERROR - START AND END CONTROL FRAMES DO NOT MATCH]\n");
 
@@ -196,8 +193,7 @@ int receiverTasks(){
 }
 
 
-void applicationLayer(const char *serialPort, const char *role, int baudRate,
-                      int nTries, int timeout, const char *filename){
+void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename){
     LinkLayer connectionParams = buildConnectionParams(serialPort, role, baudRate, nTries, timeout);
 
     int fd;
@@ -215,15 +211,15 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
         else{
             printf("\n---- READ PROTOCOL ----\n");
-            if(receiverTasks() < 0) printf("[ERROR WHILE READING - CLOSING]\n");
+            if(receiverTasks(filename) < 0) printf("[ERROR WHILE READING - CLOSING]\n");
         }
-    }
 
-    // llclose
-    printf("\n---- CLOSE PROTOCOL ----\n");
-    if(llclose(fd) < 0){
-        printf("[ERROR - llclose()]\n");
-        exit(-1);
+        // llclose
+        printf("\n---- CLOSE PROTOCOL ----\n");
+        if(llclose(fd) < 0){
+            printf("[ERROR - llclose()]\n");
+            exit(-1);
+        }
     }
 
 }

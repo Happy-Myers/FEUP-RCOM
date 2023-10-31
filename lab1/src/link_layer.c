@@ -28,6 +28,9 @@ int alarmTriggered = FALSE;
 int frameNumTx = 0;
 int frameNumRx = 1;
 
+int totalPackets = 0;
+int packetsReceived = 0;
+int packetsRejected = 0;
 
 int set_fd(LinkLayer conParam){
 
@@ -319,18 +322,21 @@ int llwrite(const unsigned char *buf, int bufSize){
         alarmTriggered = FALSE;
 
         while(alarmTriggered == FALSE && !accepted){
-            printf("    -Sending Data\n");
+            printf("    -Sending Data [%d Bytes]\n", bufSize);
             write(fd, frame, frameSize);
             unsigned char response = readCFrame();
 
             if(response == RR0 || response == RR1){
+                packetsReceived++;
                 accepted = TRUE;
                 frameNumTx = (frameNumTx + 1) % 2;
             }
+            else packetsRejected++;
         }
         retransmission--;
     }
 
+    totalPackets++;
     free(frame);
     if(accepted == TRUE)
         return 0;
@@ -381,11 +387,15 @@ int llread(unsigned char *packet){
                             sendSFrame(AR, frameNumRx == 1 ? RR1 : RR0);
                             frameNumRx = frameNumRx == 0 ? 1 : 0;
                             frameNumTx = frameNumTx == 0 ? 1 : 0;
+                            packetsReceived++;
+                            totalPackets++;
                             return index;
                         }
                         else{
                             printf("[Error - Rejected Package]\n");
                             sendSFrame(AR, (frameNumRx == 0 ? REJ0 : REJ1));
+                            packetsRejected++;
+                            totalPackets++;
                             return -1;
                         }
                     }
@@ -434,6 +444,13 @@ int llclose(int showStatistics){
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1){
         perror("tcsetattr");
         return -1;
+    }
+    
+    if(showStatistics){
+        printf("\n---- STATISTICS ----\n");
+        printf("Total Packets Sent/Received: %d\n", totalPackets);
+        printf("Total Accepted Packets: %d/%d: %.2f%%\n", packetsReceived, totalPackets, (packetsReceived/totalPackets)*100.0);
+        printf("Total Accepted Packets: %d/%d: %.2f%%\n", packetsRejected, totalPackets, (packetsRejected/totalPackets)*100.0);
     }
 
     close(fd);
