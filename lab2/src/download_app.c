@@ -2,19 +2,15 @@
 
 int main(int argc, char *argv[]){
 
-    if(argc != 2) {
-        printf("Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>\n");
-        exit(-1);
-    } 
+    if(argc != 2)
+        handleError("Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>");
 
-    struct URL url;
+    URL url;
     memset(&url, 0, sizeof(url));
-    if(parseURL(argv[1], &url) != 0) {
-        printf("Parse error. Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>\n");
-        exit(-1);
-    }
+    if(parseURL(argv[1], &url) != 0)
+        handleError("Parse error. Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>");
 
-    printf("Host: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n", url.host, url.resource, url.file, url.user, url.pwd, url.ip);
+    printConnParams(url);
 
     char answer[MAX_LENGTH];
     int socketA = createSocket(url.ip, FTP_PORT);
@@ -30,10 +26,8 @@ int main(int argc, char *argv[]){
 
     int port;
     char ip[MAX_LENGTH];
-    if(passiveMode(socketA, ip, &port) < 0){
-        printf("Passive mode failed\n");
-        exit(-1);
-    }
+    if(passiveMode(socketA, ip, &port) < 0)
+        handleError("Passive mode failed");
 
     int socketB = createSocket(ip, port);
     if(socketB < 0){
@@ -41,25 +35,23 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
-    if(requestResource(socketA, url.resource) < 0) {
+    if(requestResource(socketA, url.resource) < 0){
         printf("Unknown resouce '%s' in '%s:%d'\n", url.resource, ip, port);
         exit(-1);
     }
 
-    if(getFile(socketA, socketB, url.file) < 0) {
+    if(getFile(socketA, socketB, url.file) < 0){
         printf("Error transfering file '%s' from '%s:%d'\n", url.file, ip, port);
         exit(-1);
     }
 
-    if(endConnection(socketA, socketB) < 0) {
-        printf("Sockets close error\n");
-        exit(-1);
-    }
+    if(endConnection(socketA, socketB) < 0)
+        handleError("Sockets close error\n");
 
     return 0;
 }
 
-int parseURL(char *input, struct URL *url){
+int parseURL(char *input, URL *url){
 
     regex_t regex;
     if(regcomp(&regex, BARRA, 0) != 0) return -1;
@@ -82,10 +74,9 @@ int parseURL(char *input, struct URL *url){
 
     struct hostent *h;
     if(strlen(url->host) == 0) return -1;
-    if((h = gethostbyname(url->host)) == NULL){
-        printf("Invalid hostname '%s'\n", url->host);
-        return -1;
-    }
+    if((h = gethostbyname(url->host)) == NULL)
+        handleErrorObject("Invalid hostname", url->host);
+
     strcpy(url->ip, inet_ntoa(*((struct in_addr *) h->h_addr)));
 
     return !(
@@ -103,15 +94,11 @@ int createSocket(char *ip, int port){
     server_addr.sin_addr.s_addr = inet_addr(ip);  
     server_addr.sin_port = htons(port); 
     
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-        perror("socket()");
-        return -1;
-    }
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+        handleError("Error on socket()");
 
-    if(connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0){
-        perror("connect()");
-        return -1;
-    }
+    if(connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0)
+        handleError("Error on connect()");
     
     return sockfd;
 }
@@ -132,10 +119,8 @@ int stateMachineRead(const int socket, char* buffer){
     ResponseState state = START;
 
     while(state != END){
-        if(read(socket, &byte, 1) < 0){
-            perror("Error while reading\n");
-            return -1;
-        }
+        if(read(socket, &byte, 1) < 0)
+            handleError("Error while reading");
 
         switch(state){
             case START:
@@ -177,10 +162,8 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     printf("%s", userCommand);
 
     write(socket, userCommand, strlen(userCommand));
-    if(readResponse(socket, answer) != PWD_READY){
-        printf("Unknown user: '%s'. Aborting.\n", usr);
-        return -1;
-    }
+    if(readResponse(socket, answer) != PWD_READY)
+        handleErrorObject("Unknown user", usr);
 
     // password
     strcpy(passCommand, "pass ");
@@ -189,11 +172,9 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     printf("%s", passCommand);
     
     write(socket, passCommand, strlen(passCommand));
-    if(readResponse(socket, answer) != LOG_SUCCESS){
-        printf("Incorrect password: '%s'. Aborting.\n", pwd);
-        return -1;
-    }
-
+    if(readResponse(socket, answer) != LOG_SUCCESS)
+        handleErrorObject("Incorrect password", pwd);
+    
     return 0;
 }
 
@@ -219,20 +200,17 @@ int requestResource(const int socket, char *resource){
     strcat(fileCommand, "\n");
 
     write(socket, fileCommand, sizeof(fileCommand));
-    if(readResponse(socket, answer) != TRANSFER_READY){
-        printf("Error reaching resourse: '%s'. Aborting.\n", resource);
-        return -1;
-    }
+    if(readResponse(socket, answer) != TRANSFER_READY)
+        handleErrorObject("Error reaching resourse:", resource);
     
     return 0;
 }
 
 int getFile(const int socketA, const int socketB, char *filename){
     FILE *fd = fopen(filename, "wb");
-    if(fd == NULL){
-        printf("Error opening or creating file '%s'\n", filename);
-        return -1;
-    }
+
+    if(fd == NULL)
+        handleErrorObject("Error opening or creating file", filename);
 
     char buffer[MAX_LENGTH];
     int bytes;
@@ -245,10 +223,8 @@ int getFile(const int socketA, const int socketB, char *filename){
 
     fclose(fd);
 
-    if(readResponse(socketA, buffer) != TRANSFER_COMPLETE){
-        printf("Error transfering resource: '%s'. Aborting.\n", filename);
-        return -1;
-    }
+    if(readResponse(socketA, buffer) != TRANSFER_COMPLETE)
+        handleErrorObject("Error transfering resource:", filename);
 
     return 0;
 }
@@ -257,10 +233,29 @@ int endConnection(const int socketA, const int socketB){
     char answer[MAX_LENGTH];
     write(socketA, "quit\n", 5);
 
-    if(readResponse(socketA, answer) != END_CONNECTION){
-        printf("Error ending connection. Aborting anyway\n");
-        return -1;
-    }
+    if(readResponse(socketA, answer) != END_CONNECTION)
+        handleError("Error ending connection. Aborting anyway\n");
 
     return close(socketA) || close(socketB);
+}
+
+void handleError(const char *errorMessage){
+    perror(errorMessage);
+    exit(-1);
+}
+
+void handleErrorObject(const char *errorMessage, const char* object){
+    fprintf(stderr, "%s %s. Closing\n", errorMessage, object);
+    exit(-1);
+}
+
+void printConnParams(URL url){
+    printf("--- Connection Parameters ---\n");
+    printf(" -Host: %s\n", url.host);
+    printf(" -Resource: %s\n", url.resource);
+    printf(" -File: %s\n", url.file);
+    printf(" -User: %s\n", url.user);
+    printf(" -Password: %s\n", url.pwd);
+    printf(" -IP: %s\n", url.ip);
+    printf("-----------------------------\n");
 }

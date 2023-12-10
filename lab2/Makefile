@@ -1,14 +1,13 @@
+COMPILER_TYPE = gnu
 CC = gcc
-CFLAGS = -Wall
 
-SRC = src/
-INCLUDE = include/
-BIN = bin/
+PROG = download
+SRC = src/download_app.c
 
-.PHONY: app
-app: $(SRC)/download_app.c
-	$(CC) $(CFLAGS) -o download_app $^
+CFLAGS= -Wall -g
 
-.PHONY: clean
+$(PROG): $(SRC)
+	$(CC) $(CFLAGS) $(SRC) -o $(PROG)
+
 clean:
-	rm -rf download_app
+	rm -rf download

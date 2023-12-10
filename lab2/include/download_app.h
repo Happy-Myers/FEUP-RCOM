@@ -11,8 +11,8 @@
 
 #define MAX_LENGTH  500
 #define FTP_PORT    21
-#define FALSE 0
-#define TRUE 1
+#define FALSE       0
+#define TRUE        1
 
 /* Server responses */
 #define AUTH_READY              220
@@ -38,17 +38,16 @@
 #define DFLT_USR        "anonymous"
 #define DFLT_PWD        "password"
 
-/* Parser output */
-struct URL {
+typedef struct 
+{
     char host[MAX_LENGTH];      // 'ftp.up.pt'
     char resource[MAX_LENGTH];  // 'path/to/file/pipe.txt'
     char file[MAX_LENGTH];      // 'pipe.txt'
     char user[MAX_LENGTH];      // 'username'
     char pwd[MAX_LENGTH];       // 'password'
     char ip[MAX_LENGTH];        // 193.137.29.15
-};
+} URL;
 
-/* Machine states that receives the response from the server */
 typedef enum {
     START,
     SINGLE,
@@ -56,7 +55,7 @@ typedef enum {
     END
 } ResponseState;
 
-int parseURL(char *input, struct URL *url);
+int parseURL(char *input, URL *url);
 int createSocket(char *ip, int port);
 int readResponse(const int socket, char* buffer);
 int stateMachineRead(const int socket, char* buffer);
@@ -65,3 +64,6 @@ int passiveMode(const int socket, char *ip, int *port);
 int requestResource(const int socket, char *resource);
 int getFile(const int socketA, const int socketB, char *filename);
 int endConnection(const int socketA, const int socketB);
+void handleError(const char *errorMessage);
+void handleErrorObject(const char *errorMessage, const char* object);
+void printConnParams(URL url);
