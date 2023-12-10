@@ -14,7 +14,7 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
-    printf("Host: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n", url.host, url.resource, url.file, url.user, url.password, url.ip);
+    printf("Host: %s\nResource: %s\nFile: %s\nUser: %s\nPassword: %s\nIP Address: %s\n", url.host, url.resource, url.file, url.user, url.pwd, url.ip);
 
     char answer[MAX_LENGTH];
     int socketA = createSocket(url.ip, FTP_PORT);
@@ -167,30 +167,30 @@ int stateMachineRead(const int socket, char* buffer){
     return index;
 }
 
-int confirmAuthentication(const int socket, const char* user, const char* pass){
-    char userCommand[5+strlen(user)+1], passCommand[5+strlen(pass)+1], answer[MAX_LENGTH];
+int confirmAuthentication(const int socket, const char* usr, const char* pwd){
+    char userCommand[5+strlen(usr)+1], passCommand[5+strlen(pwd)+1], answer[MAX_LENGTH];
 
     // user
     strcpy(userCommand, "user ");
-    strcat(userCommand, user);
+    strcat(userCommand, usr);
     strcat(userCommand, "\n");
     printf("%s", userCommand);
 
     write(socket, userCommand, strlen(userCommand));
     if(readResponse(socket, answer) != PWD_READY){
-        printf("Unknown user: '%s'. Aborting.\n", user);
+        printf("Unknown user: '%s'. Aborting.\n", usr);
         return -1;
     }
 
     // password
     strcpy(passCommand, "pass ");
-    strcat(passCommand, pass);
+    strcat(passCommand, pwd);
     strcat(passCommand, "\n");
     printf("%s", passCommand);
     
     write(socket, passCommand, strlen(passCommand));
     if(readResponse(socket, answer) != LOG_SUCCESS){
-        printf("Incorrect password: '%s'. Aborting.\n", pass);
+        printf("Incorrect password: '%s'. Aborting.\n", pwd);
         return -1;
     }
 
