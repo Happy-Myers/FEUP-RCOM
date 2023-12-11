@@ -1,5 +1,7 @@
 #include "../include/download_app.h"
 
+extern char response[MAX_LENGTH];
+
 int main(int argc, char *argv[]){
 
     // ./download ftp://rcom:rcom@netlab1.fe.up.pt/files/pic2.png
@@ -13,14 +15,13 @@ int main(int argc, char *argv[]){
 
     printConnParams(url);
 
-    char answer[MAX_LENGTH];
     int socketA = createSocket(url.ip, FTP_PORT);
-    if(socketA < 0 || readResponse(socketA, answer) != AUTH_READY){
+    if(socketA < 0 || readResponse(socketA) != AUTH_READY){
         printf("Socket to '%s' and port %d failed\n", url.ip, FTP_PORT);
         exit(-1);
     }
 
-    if(confirmAuthentication(socketA, url.user, url.pwd) < 0){
+    if(login(socketA, url.user, url.pwd) < 0){
         printf("Authentication failed with username = '%s' and password = '%s'.\n", url.user, url.pwd);
         exit(-1);
     }
@@ -123,57 +124,31 @@ int createSocket(char *ip, int port){
     return sockfd;
 }
 
-int readResponse(const int socket, char* buffer){
-    int responseCode;
-    memset(buffer, 0, MAX_LENGTH);
+int readResponse(const int socket){
+    int bytes_read = 0;
+    size_t n_bytes = 0;
+    char buf[MAX_LENGTH];
 
-    if(stateMachineRead(socket, buffer) < 0) return -1;
+    memset(response, 0, sizeof(response));
+    char code[4];
 
-    sscanf(buffer, RESPCODE_REGEX, &responseCode);
-    return responseCode;
-}
+    // Assuming socket is a valid socket descriptor
+    while((n_bytes = recv(socket, buf, sizeof(buf), 0)) > 0){
+        strncat(response, buf, n_bytes - 1);
+        bytes_read += n_bytes;
 
-int stateMachineRead(const int socket, char* buffer){
-    char byte;
-    int index = 0;
-    ResponseState state = START;
-
-    while(state != END){
-        if(read(socket, &byte, 1) < 0)
-            handleError("Error while reading");
-
-        switch(state){
-            case START:
-                if(byte == ' ') state = SINGLE;
-                else if(byte == '-') state = MULTIPLE;
-                else if(byte == '\n') state = END;
-                else buffer[index++] = byte;
-                break;
-
-            case SINGLE:
-                if(byte == '\n') state = END;
-                else buffer[index++] = byte;
-                break;
-
-            case MULTIPLE:
-                if(byte == '\n'){
-                    memset(buffer, 0, MAX_LENGTH);
-                    state = START;
-                    index = 0;
-                }
-                else buffer[index++] = byte;
-                break;
-
-            case END:
-                break;
+        if(buf[3] == ' '){
+            sscanf(buf, "%3s", code);
+            code[3] = '\0';
+            break;
         }
     }
 
-    return index;
+    return atoi(code);
 }
 
-int confirmAuthentication(const int socket, const char* usr, const char* pwd){
-    char userCommand[5+strlen(usr)+1], passCommand[5+strlen(pwd)+1], answer[MAX_LENGTH];
+int login(const int socket, const char* usr, const char* pwd){
+    char userCommand[5+strlen(usr)+1], passCommand[5+strlen(pwd)+1];
 
     // user
     strcpy(userCommand, "user ");
@@ -181,7 +156,7 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     strcat(userCommand, "\n");
 
     write(socket, userCommand, strlen(userCommand));
-    if(readResponse(socket, answer) != PWD_READY)
+    if(readResponse(socket) != PWD_READY)
         handleErrorObject("Unknown user", usr);
 
     // password
@@ -190,20 +165,21 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     strcat(passCommand, "\n");
     
     write(socket, passCommand, strlen(passCommand));
-    if(readResponse(socket, answer) != LOG_SUCCESS)
+    if(readResponse(socket) != LOG_SUCCESS)
         handleErrorObject("Incorrect password", pwd);
     
     return 0;
 }
 
 int passiveMode(const int socket, char *ip, int *port){
-    char answer[MAX_LENGTH];
     int ip1, ip2, ip3, ip4, port1, port2;
 
     write(socket, "pasv\n", 5);
-    if(readResponse(socket, answer) != PASSIVE) return -1;
+    if(readResponse(socket) != PASSIVE) return -1;
 
-    sscanf(answer, PASSIVE_REGEX, &ip1, &ip2, &ip3, &ip4, &port1, &port2);
+    if(sscanf(response, "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)", &ip1, &ip2, &ip3, &ip4, &port1, &port2) != 6)
+        handleError("Couldnt parse IP and Port");
+
     *port = port1 * 256 + port2;
     snprintf(ip, MAX_LENGTH, "%d.%d.%d.%d", ip1, ip2, ip3, ip4);
 
@@ -212,13 +188,12 @@ int passiveMode(const int socket, char *ip, int *port){
 
 int requestResource(const int socket, char *resource){
     char fileCommand[5+strlen(resource)+1];
-    char answer[MAX_LENGTH];
     strcpy(fileCommand, "retr ");
     strcat(fileCommand, resource);
     strcat(fileCommand, "\n");
 
     write(socket, fileCommand, sizeof(fileCommand));
-    if(readResponse(socket, answer) != TRANSFER_READY)
+    if(readResponse(socket) != TRANSFER_READY)
         handleErrorObject("Error reaching resourse:", resource);
     
     return 0;
@@ -232,26 +207,31 @@ int getFile(const int socketA, const int socketB, char *filename){
 
     char buffer[MAX_LENGTH];
     int bytes;
-    int eof = TRUE;
+    int eof = FALSE;
 
-    while(eof){
-        if((bytes = read(socketB, buffer, MAX_LENGTH)) == 0) eof = FALSE;
-        if(fwrite(buffer, bytes, 1, fd) < 0) return -1;
+    while(!eof){
+        if((bytes = read(socketB, buffer, MAX_LENGTH)) == 0) eof = TRUE;
+
+        else if(bytes < 0) handleError("Error reading from socket");
+
+        else{
+            if((bytes = fwrite(buffer, bytes, 1, fd)) < 0)
+                handleError("Error writing to file");
+        }
     }
 
     fclose(fd);
 
-    if(readResponse(socketA, buffer) != TRANSFER_COMPLETE)
+    if(readResponse(socketA) != TRANSFER_COMPLETE)
         handleErrorObject("Error transfering resource:", filename);
 
     return 0;
 }
 
 int endConnection(const int socketA, const int socketB){
-    char answer[MAX_LENGTH];
     write(socketA, "quit\n", 5);
 
-    if(readResponse(socketA, answer) != END_CONNECTION)
+    if(readResponse(socketA) != END_CONNECTION)
         handleError("Error ending connection. Aborting anyway\n");
 
     return close(socketA) || close(socketB);

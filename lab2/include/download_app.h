@@ -25,22 +25,13 @@
 #define END_CONNECTION          221
 
 /* Parser regex */
-#define ARROBA              "@"
-#define BARRA               "/"
-#define HOST_REGEX          "%*[^/]//%[^/]"
-#define HOST_ARROBA_REGEX   "%*[^/]//%*[^@]@%[^/]"
-#define RESOURCE_REGEX      "%*[^/]//%*[^/]/%s"
-#define USR_REGEX           "%*[^/]//%[^:/]"
-#define PWD_REGEX           "%*[^/]//%*[^:]:%[^@\n$]"
-#define RESPCODE_REGEX      "%d"
 #define PASSIVE_REGEX       "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]"
 
 /* Default credentials*/
 #define DFLT_USR        "anonymous"
 #define DFLT_PWD        "password"
 
-typedef struct 
-{
+typedef struct {
     char host[MAX_LENGTH];      // 'ftp.up.pt'
     char resource[MAX_LENGTH];  // 'path/to/file/pipe.txt'
     char file[MAX_LENGTH];      // 'pipe.txt'
@@ -49,20 +40,14 @@ typedef struct
     char ip[MAX_LENGTH];        // 193.137.29.15
 } URL;
 
-typedef enum {
-    START,
-    SINGLE,
-    MULTIPLE,
-    END
-} ResponseState;
+char response[MAX_LENGTH];
 
 int parseURL(char *input, URL *url);
 void getCredentials(char* args, URL *url);
 void getResource(char* path, URL *url);
 int createSocket(char *ip, int port);
-int readResponse(const int socket, char* buffer);
-int stateMachineRead(const int socket, char* buffer);
-int confirmAuthentication(const int socket, const char* user, const char* pass);
+int readResponse(const int socket);
+int login(const int socket, const char* user, const char* pass);
 int passiveMode(const int socket, char *ip, int *port);
 int requestResource(const int socket, char *resource);
 int getFile(const int socketA, const int socketB, char *filename);
