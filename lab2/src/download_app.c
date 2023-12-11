@@ -40,10 +40,12 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
+    printf("Getting file...\n");
     if(getFile(socketA, socketB, url.file) < 0){
         printf("Error transfering file '%s' from '%s:%d'\n", url.file, ip, port);
         exit(-1);
     }
+    printf("File Transfer Complete!\n");
 
     if(endConnection(socketA, socketB) < 0)
         handleError("Sockets close error\n");
@@ -159,7 +161,6 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     strcpy(userCommand, "user ");
     strcat(userCommand, usr);
     strcat(userCommand, "\n");
-    printf("%s", userCommand);
 
     write(socket, userCommand, strlen(userCommand));
     if(readResponse(socket, answer) != PWD_READY)
@@ -169,7 +170,6 @@ int confirmAuthentication(const int socket, const char* usr, const char* pwd){
     strcpy(passCommand, "pass ");
     strcat(passCommand, pwd);
     strcat(passCommand, "\n");
-    printf("%s", passCommand);
     
     write(socket, passCommand, strlen(passCommand));
     if(readResponse(socket, answer) != LOG_SUCCESS)
