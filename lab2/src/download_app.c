@@ -2,13 +2,14 @@
 
 int main(int argc, char *argv[]){
 
+    // ./download ftp://rcom:rcom@netlab1.fe.up.pt/files/pic2.png
     if(argc != 2)
-        handleError("Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>");
+        handleError("Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
 
     URL url;
     memset(&url, 0, sizeof(url));
     if(parseURL(argv[1], &url) != 0)
-        handleError("Parse error. Usage: ./download_app ftp://[<user>:<password>@]<host>/<url-path>");
+        handleError("Parse error. Usage: ./download ftp://[<user>:<password>@]<host>/<url-path>");
 
     printConnParams(url);
 
@@ -55,36 +56,53 @@ int main(int argc, char *argv[]){
 
 int parseURL(char *input, URL *url){
 
-    regex_t regex;
-    if(regcomp(&regex, BARRA, 0) != 0) return -1;
-    if(regexec(&regex, input, 0, NULL, 0)) return -1;
+    char* ftp = strtok(input, ":"); // tudo o que está antes do primeiro ":"
+    char* args = strtok(NULL, "/"); // tudo o que está antes do primeiro "/" (nao inclui //)
+    char* path = strtok(NULL, ""); // o restante, nomeadamente o path para o ficheiro / resource
 
-    if(regcomp(&regex, ARROBA, 0) != 0) return -1;
-    if(regexec(&regex, input, 0, NULL, 0) != 0){
-        sscanf(input, HOST_REGEX, url->host);
-        strcpy(url->user, DFLT_USR);
-        strcpy(url->pwd, DFLT_PWD);
-    }
-    else{
-        sscanf(input, HOST_ARROBA_REGEX, url->host);
-        sscanf(input, USR_REGEX, url->user);
-        sscanf(input, PWD_REGEX, url->pwd);
-    }
+    if(ftp == NULL || args == NULL || path == NULL)
+        handleError("Couldnt process input as URL");
 
-    sscanf(input, RESOURCE_REGEX, url->resource);
-    strcpy(url->file, strrchr(input, '/') + 1);
+    getCredentials(args, url);
+    getResource(path, url);
 
     struct hostent *h;
-    if(strlen(url->host) == 0) return -1;
-    if((h = gethostbyname(url->host)) == NULL)
-        handleErrorObject("Invalid hostname", url->host);
+    if(strlen(url->host) == 0 || (h = gethostbyname(url->host)) == NULL)
+        handleError("Couldnt get host name.");
 
     strcpy(url->ip, inet_ntoa(*((struct in_addr *) h->h_addr)));
 
-    return !(
-        strlen(url->host) && strlen(url->user) && 
-        strlen(url->pwd) && strlen(url->resource) && 
-        strlen(url->file));
+    return 0;
+}
+
+void getCredentials(char* args, URL *url){
+    char* login = NULL, *host = NULL, *user = NULL, *pwd = NULL;
+
+    if(strchr(args, '@') != NULL){
+        login = strtok(args, "@"); // credenciais user:password
+        host = strtok(NULL, "@"); // o restante, nomeadamente o host
+
+        user = strtok(login, ":"); // retira o username das credenciais
+        pwd = strtok(NULL, ":"); // retira a password das credenciais
+    }
+
+    user = user == NULL ? DFLT_USR : user;
+    pwd = pwd == NULL ? DFLT_PWD : pwd;
+    host = (user == NULL && pwd == NULL) ? args : host;
+
+    strcpy(url->user, user);
+    strcpy(url->pwd, pwd);
+    strcpy(url->host, host);
+}
+
+void getResource(char* path, URL *url){
+    // Copy the entire path to the resource field
+    strncpy(url->resource, path, MAX_LENGTH - 1);
+    url->resource[MAX_LENGTH - 1] = '\0';  // Ensure null-termination
+
+    // Use basename to get the file name
+    strncpy(url->file, basename(path), MAX_LENGTH - 1);
+    url->file[MAX_LENGTH - 1] = '\0';  // Ensure null-termination
 }
 
 int createSocket(char *ip, int port){

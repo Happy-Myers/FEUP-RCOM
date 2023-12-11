@@ -8,6 +8,7 @@
 #include <string.h>
 #include <regex.h>
 #include <termios.h>
+#include <libgen.h>
 
 #define MAX_LENGTH  500
 #define FTP_PORT    21
@@ -56,6 +57,8 @@ typedef enum {
 } ResponseState;
 
 int parseURL(char *input, URL *url);
+void getCredentials(char* args, URL *url);
+void getResource(char* path, URL *url);
 int createSocket(char *ip, int port);
 int readResponse(const int socket, char* buffer);
 int stateMachineRead(const int socket, char* buffer);
