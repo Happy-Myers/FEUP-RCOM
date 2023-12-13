@@ -57,9 +57,9 @@ int main(int argc, char *argv[]){
 
 int parseURL(char *input, URL *url){
 
-    char* ftp = strtok(input, ":"); // tudo o que está antes do primeiro ":"
-    char* args = strtok(NULL, "/"); // tudo o que está antes do primeiro "/" (nao inclui //)
-    char* path = strtok(NULL, ""); // o restante, nomeadamente o path para o ficheiro / resource
+    char* ftp = strtok(input, ":");
+    char* args = strtok(NULL, "/");
+    char* path = strtok(NULL, "");
 
     if(ftp == NULL || args == NULL || path == NULL)
         handleError("Couldnt process input as URL");
@@ -83,13 +83,13 @@ void getCredentials(char* args, URL *url){
         login = strtok(args, "@"); // credenciais user:password
         host = strtok(NULL, "@"); // o restante, nomeadamente o host
 
-        user = strtok(login, ":"); // retira o username das credenciais
-        pwd = strtok(NULL, ":"); // retira a password das credenciais
+        user = strtok(login, ":"); // extrai o username das credenciais
+        pwd = strtok(NULL, ":"); // extrai a password das credenciais
     }
 
+    host = (user == NULL && pwd == NULL) ? args : host;
     user = user == NULL ? DFLT_USR : user;
     pwd = pwd == NULL ? DFLT_PWD : pwd;
-    host = (user == NULL && pwd == NULL) ? args : host;
 
     strcpy(url->user, user);
     strcpy(url->pwd, pwd);
@@ -126,25 +126,24 @@ int createSocket(char *ip, int port){
 
 int readResponse(const int socket){
     int bytes_read = 0;
-    size_t n_bytes = 0;
+    size_t n_bytes = 1;
     char buf[MAX_LENGTH];
 
     memset(response, 0, sizeof(response));
-    char code[4];
+    int code = 0;
 
-    // Assuming socket is a valid socket descriptor
-    while((n_bytes = recv(socket, buf, sizeof(buf), 0)) > 0){
+    n_bytes = recv(socket, buf, sizeof(buf), 0);
+    if(n_bytes < 0) handleError("Error while reading response");
+
+    else{
         strncat(response, buf, n_bytes - 1);
         bytes_read += n_bytes;
-
-        if(buf[3] == ' '){
-            sscanf(buf, "%3s", code);
-            code[3] = '\0';
-            break;
-        }
+        sscanf(buf, "%d", &code);
     }
 
-    return atoi(code);
+    printf("response: %s",response);
+
+    return code;
 }
 
 int login(const int socket, const char* usr, const char* pwd){

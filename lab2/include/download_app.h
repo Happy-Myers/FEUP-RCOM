@@ -24,9 +24,6 @@
 #define TRANSFER_COMPLETE       226
 #define END_CONNECTION          221
 
-/* Parser regex */
-#define PASSIVE_REGEX       "%*[^(](%d,%d,%d,%d,%d,%d)%*[^\n$)]"
-
 /* Default credentials*/
 #define DFLT_USR        "anonymous"
 #define DFLT_PWD        "password"
