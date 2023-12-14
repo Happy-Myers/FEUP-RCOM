@@ -139,16 +139,18 @@ int readResponse(const int socket){
 
     memset(response, 0, sizeof(response));
     int code = 0;
-
+    printf("aaaaaaaaa\n");
     n_bytes = recv(socket, buf, sizeof(buf), 0);
-    if(n_bytes < 0) handleError("Error while reading response");
-
+    printf("nr bytes lidos: %ld\n", n_bytes);
+    if(n_bytes < 0){
+        handleError("Error while reading response");
+    } 
     else{
         strncat(response, buf, n_bytes - 1);
         bytes_read += n_bytes;
         sscanf(buf, "%d", &code);
-        printf("    > %s\n", buf);
     }
+    printf("%s\n", response);
 
     return code;
 }
@@ -160,7 +162,7 @@ int login(const int socket, const char* usr, const char* pwd){
     strcpy(userCommand, "user ");
     strcat(userCommand, usr);
     strcat(userCommand, "\n");
-    printf("    < %s", userCommand);
+
     write(socket, userCommand, strlen(userCommand));
     if(readResponse(socket) != PWD_READY)
         handleErrorObject("Unknown user", usr);
@@ -169,7 +171,7 @@ int login(const int socket, const char* usr, const char* pwd){
     strcpy(passCommand, "pass ");
     strcat(passCommand, pwd);
     strcat(passCommand, "\n");
-    printf("    < %s", passCommand);
+
     write(socket, passCommand, strlen(passCommand));
     if(readResponse(socket) != LOG_SUCCESS)
         handleErrorObject("Incorrect password", pwd);
@@ -179,7 +181,7 @@ int login(const int socket, const char* usr, const char* pwd){
 
 int passiveMode(const int socket, char *ip, int *port){
     int ip1, ip2, ip3, ip4, port1, port2;
-    printf("    < pasv\n");
+
     write(socket, "pasv\n", 5);
     if(readResponse(socket) != PASSIVE) return -1;
 
@@ -197,7 +199,7 @@ int requestResource(const int socket, char *resource){
     strcpy(fileCommand, "retr ");
     strcat(fileCommand, resource);
     strcat(fileCommand, "\n");
-    printf("    < %s", fileCommand);
+    
     write(socket, fileCommand, sizeof(fileCommand));
     if(readResponse(socket) != TRANSFER_READY)
         handleErrorObject("Error reaching resourse:", resource);

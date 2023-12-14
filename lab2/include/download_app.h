@@ -25,7 +25,7 @@
 
 /* Default credentials*/
 #define DFLT_USR        "anonymous"
-#define DFLT_PWD        "password"
+#define DFLT_PWD        "anonymous"
 
 typedef struct {
     char host[MAX_LENGTH];      // 'netlab1.fe.up.pt'
