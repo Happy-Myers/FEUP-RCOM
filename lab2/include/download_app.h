@@ -9,7 +9,7 @@
 #include <termios.h>
 #include <libgen.h>
 
-#define MAX_LENGTH  500
+#define MAX_LENGTH  1024
 #define FTP_PORT    21
 #define FALSE       0
 #define TRUE        1
