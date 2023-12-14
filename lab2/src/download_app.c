@@ -21,15 +21,20 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
+    printf("--- Logging...\n");
     if(login(socketA, url.user, url.pwd) < 0){
         printf("Authentication failed with username = '%s' and password = '%s'.\n", url.user, url.pwd);
         exit(-1);
     }
+    printf("--- Login Successfull!\n\n");
 
     int port;
     char ip[MAX_LENGTH];
+
+    printf("--- Entering Passive Mode...\n");
     if(passiveMode(socketA, ip, &port) < 0)
         handleError("Passive mode failed");
+    printf("--- Entered Passive Mode!\n\n");
 
     int socketB = createSocket(ip, port);
     if(socketB < 0){
@@ -37,26 +42,29 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
 
+    printf("--- Requesting Resource...\n");
     if(requestResource(socketA, url.resource) < 0){
         printf("Unknown resouce '%s' in '%s:%d'\n", url.resource, ip, port);
         exit(-1);
     }
+    printf("--- Resource Available!\n\n");
 
-    printf("Getting file...\n");
+    printf("--- Getting file...\n");
     if(getFile(socketA, socketB, url.file) < 0){
         printf("Error transfering file '%s' from '%s:%d'\n", url.file, ip, port);
         exit(-1);
     }
-    printf("File Transfer Complete!\n");
+    printf("--- File Transfer Complete!\n\n");
 
+    printf("--- Closing Connection...\n");
     if(endConnection(socketA, socketB) < 0)
         handleError("Sockets close error\n");
+    printf("--- Connection Closed!\n");
 
     return 0;
 }
 
 int parseURL(char *input, URL *url){
-
     char* ftp = strtok(input, ":");
     char* args = strtok(NULL, "/");
     char* path = strtok(NULL, "");
@@ -140,8 +148,6 @@ int readResponse(const int socket){
         bytes_read += n_bytes;
         sscanf(buf, "%d", &code);
     }
-
-    printf("response: %s",response);
 
     return code;
 }
@@ -254,5 +260,5 @@ void printConnParams(URL url){
     printf(" -User: %s\n", url.user);
     printf(" -Password: %s\n", url.pwd);
     printf(" -IP: %s\n", url.ip);
-    printf("-----------------------------\n");
+    printf("-----------------------------\n\n");
 }

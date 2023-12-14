@@ -6,7 +6,6 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <string.h>
-#include <regex.h>
 #include <termios.h>
 #include <libgen.h>
 
@@ -29,7 +28,7 @@
 #define DFLT_PWD        "password"
 
 typedef struct {
-    char host[MAX_LENGTH];      // 'ftp.up.pt'
+    char host[MAX_LENGTH];      // 'netlab1.fe.up.pt'
     char resource[MAX_LENGTH];  // 'path/to/file/pipe.txt'
     char file[MAX_LENGTH];      // 'pipe.txt'
     char user[MAX_LENGTH];      // 'username'
