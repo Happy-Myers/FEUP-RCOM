@@ -139,9 +139,9 @@ int readResponse(const int socket){
 
     memset(response, 0, sizeof(response));
     int code = 0;
-    printf("aaaaaaaaa\n");
+
     n_bytes = recv(socket, buf, sizeof(buf), 0);
-    printf("nr bytes lidos: %ld\n", n_bytes);
+    
     if(n_bytes < 0){
         handleError("Error while reading response");
     } 
@@ -150,7 +150,6 @@ int readResponse(const int socket){
         bytes_read += n_bytes;
         sscanf(buf, "%d", &code);
     }
-    printf("%s\n", response);
 
     return code;
 }
