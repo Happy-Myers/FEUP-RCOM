@@ -8,6 +8,9 @@
 #include <string.h>
 #include <termios.h>
 #include <libgen.h>
+#include <ctype.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 #define MAX_LENGTH  1024
 #define FTP_PORT    21
@@ -18,7 +21,8 @@
 #define AUTH_READY              220
 #define PWD_READY               331
 #define LOG_SUCCESS             230
-#define PASSIVE                 227
+#define PASSIVE_1               227
+#define PASSIVE_2               125
 #define TRANSFER_READY          150
 #define TRANSFER_COMPLETE       226
 #define END_CONNECTION          221
@@ -51,3 +55,4 @@ int endConnection(const int socketA, const int socketB);
 void handleError(const char *errorMessage);
 void handleErrorObject(const char *errorMessage, const char* object);
 void printConnParams(URL url);
+int checkLastLine(char *message);

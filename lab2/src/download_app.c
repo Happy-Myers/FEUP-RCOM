@@ -133,34 +133,38 @@ int createSocket(char *ip, int port){
 }
 
 int readResponse(const int socket){
-    int bytes_read = 0;
     size_t n_bytes = 1;
     char buf[MAX_LENGTH];
 
     memset(response, 0, sizeof(response));
     int code = 0;
+    int EOM = FALSE;
 
-    n_bytes = recv(socket, buf, sizeof(buf), 0);
-    
-    if(n_bytes < 0){
-        handleError("Error while reading response");
-    } 
-    else{
-        strncat(response, buf, n_bytes - 1);
-        bytes_read += n_bytes;
-        sscanf(buf, "%d", &code);
+    while(!EOM){
+        n_bytes = recv(socket, buf, sizeof(buf), 0);
+        
+        if(n_bytes <= 0){
+            handleError("Error while reading response");
+        }
+        else{
+            if(checkLastLine(buf) == 0){
+                strncat(response, buf, n_bytes - 1);
+                sscanf(buf, "%d ", &code);
+                EOM = TRUE;
+            }
+        }
     }
 
     return code;
 }
 
 int login(const int socket, const char* usr, const char* pwd){
-    char userCommand[5+strlen(usr)+1], passCommand[5+strlen(pwd)+1];
+    char userCommand[5+strlen(usr)+2], passCommand[5+strlen(pwd)+2];
 
     // user
     strcpy(userCommand, "user ");
     strcat(userCommand, usr);
-    strcat(userCommand, "\n");
+    strcat(userCommand, "\r\n");
 
     write(socket, userCommand, strlen(userCommand));
     if(readResponse(socket) != PWD_READY)
@@ -169,7 +173,7 @@ int login(const int socket, const char* usr, const char* pwd){
     // password
     strcpy(passCommand, "pass ");
     strcat(passCommand, pwd);
-    strcat(passCommand, "\n");
+    strcat(passCommand, "\r\n");
 
     write(socket, passCommand, strlen(passCommand));
     if(readResponse(socket) != LOG_SUCCESS)
@@ -181,8 +185,9 @@ int login(const int socket, const char* usr, const char* pwd){
 int passiveMode(const int socket, char *ip, int *port){
     int ip1, ip2, ip3, ip4, port1, port2;
 
-    write(socket, "pasv\n", 5);
-    if(readResponse(socket) != PASSIVE) return -1;
+    write(socket, "pasv\r\n", 6);
+    int passiveResponse = readResponse(socket);
+    if(passiveResponse != PASSIVE_1 && passiveResponse != PASSIVE_2) return -1;
 
     if(sscanf(response, "227 Entering Passive Mode (%d,%d,%d,%d,%d,%d)", &ip1, &ip2, &ip3, &ip4, &port1, &port2) != 6)
         handleError("Couldnt parse IP and Port");
@@ -194,13 +199,14 @@ int passiveMode(const int socket, char *ip, int *port){
 }
 
 int requestResource(const int socket, char *resource){
-    char fileCommand[5+strlen(resource)+1];
+    char fileCommand[5+strlen(resource)+2];
     strcpy(fileCommand, "retr ");
     strcat(fileCommand, resource);
-    strcat(fileCommand, "\n");
+    strcat(fileCommand, "\r\n");
     
     write(socket, fileCommand, sizeof(fileCommand));
-    if(readResponse(socket) != TRANSFER_READY)
+    int reply = readResponse(socket);
+    if(reply != TRANSFER_READY && reply != 125)
         handleErrorObject("Error reaching resourse:", resource);
     
     return 0;
@@ -236,7 +242,7 @@ int getFile(const int socketA, const int socketB, char *filename){
 }
 
 int endConnection(const int socketA, const int socketB){
-    write(socketA, "quit\n", 5);
+    write(socketA, "quit\r\n", 6);
 
     if(readResponse(socketA) != END_CONNECTION)
         handleError("Error ending connection. Aborting anyway\n");
@@ -263,4 +269,34 @@ void printConnParams(URL url){
     printf(" -Password: %s\n", url.pwd);
     printf(" -IP: %s\n", url.ip);
     printf("-----------------------------\n\n");
+}
+
+int checkLastLine(char *message){
+    int state = 0;
+    for(int i = 0; message[i] != '\0'; i++){
+        switch(state){
+            case 0:
+                if(isdigit(message[i])) state = 1;
+                else state = 0;
+                break;
+            case 1:
+                if(isdigit(message[i])) state = 2;
+                else state = 0;
+                break;
+            case 2:
+                if(isdigit(message[i])) state = 3;
+                else state = 0;
+                break;
+            case 3:
+                if(isspace(message[i])) state = 4;
+                else state = 0;
+                break;
+            case 4: 
+                return 0;
+            default:
+                break;
+        }
+    }
+
+    return -1;
 }
