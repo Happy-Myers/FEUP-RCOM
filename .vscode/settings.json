@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "random": "c",
-        "application_layer.h": "c",
-        "link_layer.h": "c"
-    }
-}
